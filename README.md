@@ -3,19 +3,21 @@
 Reproducible benchmarking lab for local LLMs on [llama.cpp](https://github.com/ggml-org/llama.cpp), starting on a Raspberry Pi 5.
 
 - **Declarative experiments**: one YAML describes models, the llama.cpp configuration (every flag), the parameter matrix, suites and gates.
+- **Hugging Face models**: `hf://org/repo[@rev]:Q4_K_M` with pinned provenance (commit + sha256), a `models/` folder for favorites, offline use, and per-model retention to save disk.
 - **Managed llama.cpp builds** by commit, with every flag validated against the binary it runs on.
 - **Hardware telemetry**: temperature, throttling, exact peak RAM, CPU frequency, and temperature-based cooldown.
 - **Reproducible results** in SQLite, with fingerprints for `--resume`, plus CSV and JSONL exports.
-- Planned: Hugging Face models and datasets, llama-server quality suites, HTML/Markdown/PNG reports and pass/fail gates. See the [roadmap](docs/PLAN.md#roadmap-de-implementación).
+- Planned: HF datasets and synthetic data, llama-server quality suites, HTML/Markdown/PNG reports, pass/fail gates, and embeddings/rerank/vision. See the [roadmap](docs/PLAN.md#roadmap-de-implementación).
 
-> Status: **v0.2.0** (Phase 1, llama-bench MVP). See [CHANGELOG](CHANGELOG.md).
+> Status: **v0.3.0** (Phase 2, Hugging Face models). See [CHANGELOG](CHANGELOG.md).
 
 ## Quick start
 
 ```bash
 uv sync
 uv run llb llama build --ref b6500 --backend cpu     # or point a build at an existing bin_dir
-cp ~/Downloads/Qwen3-1.7B-Q4_K_M.gguf models/
+uv run llb models pull hf://unsloth/Qwen3-1.7B-GGUF:Q4_K_M --favorite   # optional: run downloads on demand
+uv run llb models inspect hf://unsloth/Qwen3-1.7B-GGUF:Q4_K_M
 uv run llb validate experiments/pi5-threads.yaml
 uv run llb plan experiments/pi5-threads.yaml
 uv run llb run experiments/pi5-threads.yaml          # Ctrl-C safe; continue with --resume
@@ -31,7 +33,7 @@ experiment: { name: pi5-threads }
 llama_cpp:
   builds: [{ id: pinned, ref: b6500, backend: cpu }]
 models:
-  - { id: qwen3-1.7b-q4km, source: Qwen3-1.7B-Q4_K_M.gguf }
+  - { id: qwen3-1.7b-q4km, source: "hf://unsloth/Qwen3-1.7B-GGUF:Q4_K_M" }   # or a local .gguf
 defaults:
   load: { batch_size: 512, flash_attn: auto }
 matrix:
@@ -59,6 +61,6 @@ uv run pytest --cov
 uv run pre-commit install
 ```
 
-Optional extras: `hf`, `hf-datasets`, `report`, `parquet`, `nvidia` (`uv sync --extra report`).
+Optional extras: `hf-datasets`, `report`, `parquet`, `nvidia` (`uv sync --extra report`).
 
 Commits follow [Conventional Commits](https://www.conventionalcommits.org/) and releases follow [SemVer](https://semver.org/) ([ADR-0009](docs/adr/0009-conventional-commits-semver.md)).

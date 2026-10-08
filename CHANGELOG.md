@@ -5,6 +5,30 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-08
+
+Phase 2: Hugging Face models.
+
+### Added
+
+- Model references `hf://org/repo[@revision][:QUANT]` and `hf://org/repo[@revision]/path/file.gguf`, with Q4_K_M as the default quant (same as llama.cpp).
+- Quant matching respects name boundaries (`Q2_K` does not match `Q2_K_L`). Errors list the available files, report ambiguity across subfolders, and catch incomplete split models.
+- Split (sharded) models, both from the Hub and as local files.
+- Resolution order: local path → `models/` favorites → Hub (cache hit or download) → offline cache. Each model is resolved lazily, right before its first run.
+- Exact provenance per run: repo, resolved commit and sha256 (from the Hub's LFS metadata, without hashing the file), plus GGUF metadata.
+- `retention: delete_after_run` frees the model's cached revision after its last run.
+- Favorites in `models/<org>--<repo>/`, indexed in `models/.llb.json`; they work offline and are never deleted automatically.
+- `llb models pull | ls | inspect | favorite | unfavorite | prune`.
+- Pure-Python GGUF header reader (architecture, parameter count, quant, context length, layers, heads, experts, tensor-type mix). It does not need numpy.
+- CSV columns `model_quant`, `model_params` and `model_commit`.
+- Example experiment `quantization.yaml`; `pi5-threads` and `kv-cache` now use `hf://` sources.
+- ADR-0010 (HF cache deletion per revision through the official API) and ADR-0011 (GGUF reader).
+
+### Changed
+
+- `huggingface-hub` is now a core dependency. The `hf` extra is removed.
+- `llb validate` resolves models without downloading them.
+
 ## [0.2.0] - 2026-10-08
 
 Phase 1: llama-bench MVP.
@@ -38,6 +62,7 @@ Phase 0: project skeleton.
 - ruff, basedpyright (strict), pytest, pre-commit, and GitHub Actions on x86_64 and arm64.
 - Project proposal (`docs/PRD.md`) and plan (`docs/PLAN.md`).
 
-[Unreleased]: https://github.com/OWNER/local-llm-bench-lab/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/OWNER/local-llm-bench-lab/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/OWNER/local-llm-bench-lab/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/OWNER/local-llm-bench-lab/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/OWNER/local-llm-bench-lab/releases/tag/v0.1.0
