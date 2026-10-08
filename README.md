@@ -60,6 +60,7 @@ phases:
 | [Models](docs/MODELS.md) | Config, runtime and result classes; YAML → flag mapping; SQLite schema |
 | [ADRs](docs/adr/README.md) | Architecture decisions and their reasons |
 | [Plan](docs/PLAN.md) / [PRD](docs/PRD.md) | Roadmap and original proposal |
+| [AGENTS.md](AGENTS.md) | Contribution rules: checks, reproducibility, SemVer, commits, releases |
 
 ## Development
 
