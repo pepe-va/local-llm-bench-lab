@@ -5,6 +5,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-10-08
+
+First full run on a PC with a real build (`llb llama build --ref b11507`) and a real model (Qwen3-0.6B Q4_K_M vs Q8_0): 20/20 runs across every phase.
+
+### Fixed
+
+- A `contains` evaluator in `any` mode that passed still reported the missing values and a partial score. It now scores 1.0 with no failure detail.
+
+### Added
+
+- `_profiles/pc.yaml` (desktop or WSL: llama.cpp pinned to `b11507`, no Pi-specific checks) and `pc-smoke.yaml`, which runs every phase in minutes with Qwen3-0.6B Q4_K_M vs Q8_0.
+
 ## [0.9.0] - 2026-10-08
 
 Phase 8: dashboard. Every phase of the plan is now implemented.
@@ -187,7 +199,8 @@ Phase 0: project skeleton.
 - ruff, basedpyright (strict), pytest, pre-commit, and GitHub Actions on x86_64 and arm64.
 - Project proposal (`docs/PRD.md`) and plan (`docs/PLAN.md`).
 
-[Unreleased]: https://github.com/OWNER/local-llm-bench-lab/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/OWNER/local-llm-bech-lab/compare/v0.9.1...HEAD
+[0.9.1]: https://github.com/OWNER/local-llm-bech-lab/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/OWNER/local-llm-bench-lab/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/OWNER/local-llm-bench-lab/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/OWNER/local-llm-bench-lab/compare/v0.6.0...v0.7.0
