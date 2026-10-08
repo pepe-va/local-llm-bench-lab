@@ -1,0 +1,22 @@
+# Experiment 3 (PRD §30): KV cache quantization. K and V move together via `zip`.
+version: 1
+extends: [_profiles/pi5.yaml]
+
+experiment:
+  name: pi5-kv-cache
+  tags: [pi5, kv]
+
+models:
+  - id: qwen3-1.7b-q4km
+    source: Qwen3-1.7B-Q4_K_M.gguf
+
+defaults:
+  load: { threads: 4, batch_size: 512, ubatch_size: 256, flash_attn: "on" }
+
+matrix:
+  zip:
+    - kv.cache_type_k: [f16, q8_0, q4_0]
+      kv.cache_type_v: [f16, q8_0, q4_0]
+
+phases:
+  bench: { n_prompt: [512], n_gen: [128], n_depth: [0, 2048], repetitions: 5 }

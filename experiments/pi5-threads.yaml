@@ -1,0 +1,23 @@
+# Experiment 1 (PRD §30): best thread count on a Raspberry Pi 5.
+# Everything constant except `load.threads`.
+version: 1
+extends: [_profiles/pi5.yaml]
+
+experiment:
+  name: pi5-threads
+  description: Optimal thread count for llama.cpp on a Raspberry Pi 5.
+  tags: [pi5, threads]
+
+models:
+  - id: qwen3-1.7b-q4km
+    source: Qwen3-1.7B-Q4_K_M.gguf     # resolved from ./ then models/
+
+defaults:
+  load: { batch_size: 512, ubatch_size: 256, flash_attn: auto }
+  kv: { cache_type_k: f16, cache_type_v: f16 }
+
+matrix:
+  load.threads: [1, 2, 3, 4]
+
+phases:
+  bench: { n_prompt: [512], n_gen: [128], n_depth: [0], repetitions: 5 }

@@ -1,0 +1,57 @@
+"""Result domain objects. Independent of the backend that produced them."""
+
+from dataclasses import dataclass, field
+from typing import Any, Literal
+
+type RunStatus = Literal["completed", "failed", "interrupted"]
+type TestKind = Literal["pp", "tg", "pg"]
+
+
+@dataclass(frozen=True)
+class Measurement:
+    """One llama-bench test (e.g. pp512 at depth 0) with its per-repetition samples."""
+
+    test: TestKind
+    n_prompt: int
+    n_gen: int
+    n_depth: int
+    avg_ts: float
+    stddev_ts: float
+    avg_ns: int
+    stddev_ns: int
+    samples_ts: list[float]
+    raw: dict[str, Any] = field(repr=False)
+    median_ts: float = 0.0
+    cv: float = 0.0
+    unstable: bool = False
+
+    @property
+    def label(self) -> str:
+        name = {"pp": f"pp{self.n_prompt}", "tg": f"tg{self.n_gen}"}.get(
+            self.test, f"pp{self.n_prompt}+tg{self.n_gen}"
+        )
+        return f"{name}@d{self.n_depth}" if self.n_depth else name
+
+
+@dataclass(frozen=True)
+class RunRecord:
+    """Everything needed to reproduce and compare one run."""
+
+    fingerprint: str
+    experiment: str
+    phase: str
+    status: RunStatus
+    build: dict[str, Any]
+    model: dict[str, Any]
+    variant: dict[str, Any]
+    config: dict[str, Any]
+    argv: list[str]
+    ignored: list[str]
+    env: dict[str, Any]
+    started_at: str
+    finished_at: str
+    duration_s: float
+    error: str | None = None
+    telemetry: dict[str, Any] | None = None
+    cooldown: dict[str, Any] | None = None
+    measurements: list[Measurement] = field(default_factory=list[Measurement])

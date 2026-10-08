@@ -4,9 +4,13 @@ import platform
 from typing import Annotated
 
 import typer
-from rich.console import Console
 
 from llmbench import __version__
+from llmbench.cli import llama
+from llmbench.cli.common import console
+from llmbench.cli.plan import plan
+from llmbench.cli.run import run
+from llmbench.cli.validate import validate
 
 app = typer.Typer(
     name="llb",
@@ -14,7 +18,10 @@ app = typer.Typer(
     no_args_is_help=True,
     pretty_exceptions_show_locals=False,
 )
-console = Console()
+app.command()(validate)
+app.command()(plan)
+app.command()(run)
+app.add_typer(llama.app, name="llama")
 
 
 def _version_callback(value: bool) -> None:

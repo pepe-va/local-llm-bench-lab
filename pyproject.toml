@@ -1,6 +1,6 @@
 [project]
 name = "local-llm-bench-lab"
-version = "0.1.0"
+version = "0.2.0"
 description = "Reproducible benchmarking lab for local LLMs on llama.cpp"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -59,9 +59,11 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["PLR2004", "S101"]
+"src/llmbench/config/**" = ["RUF012"]   # pydantic copies mutable defaults per instance
+"src/llmbench/llamacpp/argv.py" = ["PLR0912", "PLR0915"]  # flat flag-mapping table
 
 [tool.ruff.lint.isort]
-known-first-party = ["llmbench"]
+known-first-party = ["llmbench", "tests"]
 
 # --- basedpyright -----------------------------------------------------------
 

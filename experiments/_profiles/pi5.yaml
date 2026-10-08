@@ -1,0 +1,11 @@
+# Raspberry Pi 5 (8 GB, Cortex-A76 x4): hardware handling shared by every Pi experiment.
+llama_cpp:
+  builds:
+    - id: pinned
+      ref: ${env:LLB_LLAMA_REF:-master}   # pin a tag (e.g. b6500) for reproducible series
+      backend: cpu
+
+hardware:
+  telemetry: { hz: 2, sources: [linux, rpi] }
+  cooldown: { enabled: true, max_temp_c: 60, stable_for_s: 10, poll_s: 5, timeout_s: 900 }
+  preflight: { require_governor: performance, fail_on_throttled: true }
