@@ -1,0 +1,86 @@
+[project]
+name = "local-llm-bench-lab"
+version = "0.1.0"
+description = "Reproducible benchmarking lab for local LLMs on llama.cpp"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+dependencies = [
+    "httpx>=0.28",
+    "psutil>=7.0",
+    "pydantic>=2.11",
+    "rich>=14.0",
+    "ruamel.yaml>=0.18",
+    "typer>=0.16",
+]
+
+[project.optional-dependencies]
+hf = ["huggingface-hub>=0.34", "gguf>=0.17"]
+hf-datasets = ["datasets>=4.0"]
+report = ["jinja2>=3.1", "plotly>=6.0", "matplotlib>=3.10"]
+parquet = ["pyarrow>=21.0"]
+nvidia = ["nvidia-ml-py>=12.570"]
+
+[project.scripts]
+llb = "llmbench.cli.app:app"
+
+[dependency-groups]
+dev = [
+    "basedpyright>=1.31",
+    "hypothesis>=6.135",
+    "pre-commit>=4.2",
+    "pytest>=8.4",
+    "pytest-cov>=6.2",
+    "ruff>=0.12",
+    "syrupy>=4.9",
+]
+
+[build-system]
+requires = ["uv_build>=0.8,<0.13"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "llmbench"
+
+# --- ruff -------------------------------------------------------------------
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+extend-exclude = ["*.md", ".claude"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF", "PL", "PT", "TRY", "N", "C4", "PTH", "RET"]
+ignore = [
+    "PLR0913", # llama.cpp configs legitimately have many params
+    "TRY003",  # long messages in exceptions are fine
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["PLR2004", "S101"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["llmbench"]
+
+# --- basedpyright -----------------------------------------------------------
+
+[tool.basedpyright]
+include = ["src", "tests"]
+pythonVersion = "3.12"
+typeCheckingMode = "strict"
+reportMissingTypeStubs = false
+
+# --- pytest -----------------------------------------------------------------
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = ["-ra", "--strict-markers", "--strict-config"]
+markers = [
+    "integration: uses fake llama.cpp binaries",
+    "hardware: requires real hardware (Raspberry Pi, GPU)",
+]
+
+[tool.coverage.run]
+source = ["llmbench"]
+branch = true

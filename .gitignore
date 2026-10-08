@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# Models: keep only the README (favorites live here, never in git)
+models/*
+!models/README.md
+*.gguf
+
+# Benchmark outputs (default lives in $LLB_HOME, these cover local overrides)
+results/
+reports/
+runs/
+*.sqlite
+*.sqlite-*
+*.parquet
+
+# Secrets
+.env
+.env.*
+
+# Editors / local tooling
+.idea/
+.vscode/
+.claude/settings.local.json
