@@ -11,6 +11,7 @@ from functools import cache
 from pathlib import Path
 
 _FLAG = re.compile(r"(?<![\w<|-])(--?[A-Za-z][\w+-]*)")
+_MAX_DECL_INDENT = 8
 _VERSION_NEW = re.compile(r"version:\s*(\S+)\s*\(build\s+(\d+),\s*commit\s+([0-9a-f]+)\)")
 _VERSION_OLD = re.compile(r"version:\s*(\d+)\s*\(([0-9a-f]+)\)")
 
@@ -28,18 +29,31 @@ class IntrospectionError(Exception):
 
 
 def parse_help(text: str) -> frozenset[str]:
-    """Flags declared in the left column of a llama.cpp `--help` output."""
+    """Flags declared in the left column of a llama.cpp `--help` output.
+
+    Flags whose description says "the argument has been removed" are excluded: llama.cpp
+    keeps them in `--help` only to print a migration hint.
+    """
     flags: set[str] = set()
+    current: set[str] = set()
     for line in text.splitlines():
         stripped = line.strip()
-        if not stripped.startswith("-"):
+        if "has been removed" in stripped:
+            flags -= current
+        # Declarations start near column 0; deeply indented lines continue a description
+        # (and may mention other flags, e.g. "use --spec-draft-n-max instead").
+        if not stripped.startswith("-") or len(line) - len(line.lstrip()) > _MAX_DECL_INDENT:
             continue
         # Columns are separated by 2+ spaces; aliases may be too (`-tb,   --threads-batch N`).
         # Keep leading segments that start with a dash; the first other one is the description.
+        current = set()
         for segment in re.split(r"\s{2,}", stripped):
             if not segment.startswith("-"):
                 break
-            flags.update(_FLAG.findall(segment))
+            current.update(_FLAG.findall(segment))
+        flags |= current
+        if "has been removed" in stripped:
+            flags -= current
     return frozenset(flags)
 
 
