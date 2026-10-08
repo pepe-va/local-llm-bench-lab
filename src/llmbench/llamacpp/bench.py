@@ -5,7 +5,6 @@ import os
 import resource
 import signal
 import subprocess
-import sys
 import threading
 import time
 from collections.abc import Callable
@@ -13,6 +12,7 @@ from dataclasses import dataclass
 from typing import IO, Any
 
 from llmbench.results.models import Measurement, TestKind
+from llmbench.telemetry.peak import PeakMemory
 
 
 class BenchError(Exception):
@@ -25,7 +25,7 @@ class BenchOutput:
     stderr: str
     duration_s: float
     max_rss_mb: float | None = None
-    """Exact peak resident memory of llama-bench, from the kernel (`ru_maxrss`)."""
+    """Peak resident memory of llama-bench (`VmHWM`, Linux; None elsewhere)."""
     cpu_user_s: float | None = None
     cpu_sys_s: float | None = None
 
@@ -68,7 +68,7 @@ def run_bench(
     timeout_s: float,
     on_start: Callable[[int], None] | None = None,
 ) -> BenchOutput:
-    """Run llama-bench and reap it with `wait4` to get its exact peak RSS and CPU time."""
+    """Run llama-bench; peak RSS from `VmHWM` polling (ADR-0012), CPU time from `wait4`."""
     t0 = time.monotonic()
     try:
         proc = subprocess.Popen(
@@ -80,6 +80,7 @@ def run_bench(
         )
     except OSError as e:
         raise BenchError(f"cannot start {argv[0]}: {e}") from None
+    peak = PeakMemory(proc.pid)
     if on_start is not None:
         on_start(proc.pid)
 
@@ -97,6 +98,7 @@ def run_bench(
         status, usage = _wait4(proc)
     finally:
         timer.cancel()
+        peak_mb = peak.stop()
     for r in readers:
         r.join()
     duration = time.monotonic() - t0
@@ -114,7 +116,7 @@ def run_bench(
         measurements,
         stderr,
         duration,
-        max_rss_mb=_maxrss_mb(usage.ru_maxrss),
+        max_rss_mb=peak_mb,
         cpu_user_s=usage.ru_utime,
         cpu_sys_s=usage.ru_stime,
     )
@@ -136,11 +138,6 @@ def _drain(stream: IO[str] | None, sink: list[str]) -> None:
     if stream is not None:
         sink.append(stream.read())
         stream.close()
-
-
-def _maxrss_mb(maxrss: int) -> float:
-    """ru_maxrss is KiB on Linux, bytes on macOS."""
-    return maxrss / (1024 * 1024) if sys.platform == "darwin" else maxrss / 1024
 
 
 def _describe_failure(code: int, stderr: str) -> str:
