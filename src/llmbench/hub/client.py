@@ -21,6 +21,14 @@ from huggingface_hub.errors import (
     RevisionNotFoundError,
 )
 
+try:  # huggingface_hub >= 2 is built on httpx2; older releases on httpx/requests
+    from httpx2 import HTTPError as _TransportFamily  # pyright: ignore[reportMissingImports]
+except ImportError:  # pragma: no cover
+    from httpx import HTTPError as _TransportFamily
+
+# Network failures (proxy refusal, DNS, connection reset...) as raised by the Hub client.
+NETWORK_ERRORS: tuple[type[BaseException], ...] = (_TransportFamily, OSError, OfflineModeIsEnabled)
+
 
 class HubUnavailableError(Exception):
     """Network/offline problem: the caller may fall back to the local cache."""
@@ -80,7 +88,9 @@ class HuggingFaceClient:
             ) from None
         except RevisionNotFoundError:
             raise HubNotFoundError(f"{repo}: revision {revision!r} not found") from None
-        except (OfflineModeIsEnabled, OSError, HfHubHTTPError) as e:
+        except (*NETWORK_ERRORS, HfHubHTTPError) as e:
+            # huggingface_hub 2.x is built on httpx: network failures arrive as
+            # httpx.TransportError (e.g. ProxyError, ConnectError), not OSError
             raise HubUnavailableError(f"{repo}: {e}") from None
         files = [
             RemoteFile(s.rfilename, s.size, s.lfs.sha256 if s.lfs else None)
@@ -96,7 +106,7 @@ class HuggingFaceClient:
     def download(self, repo: str, file: str, commit: str) -> Path:
         try:
             return Path(str(hf_hub_download(repo, file, revision=commit)))
-        except (LocalEntryNotFoundError, OfflineModeIsEnabled, OSError) as e:
+        except (LocalEntryNotFoundError, *NETWORK_ERRORS) as e:
             raise HubUnavailableError(str(e)) from None
 
     def cached_files(self) -> list[CachedFile]:

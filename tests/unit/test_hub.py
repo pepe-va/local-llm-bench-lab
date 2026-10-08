@@ -2,10 +2,11 @@
 
 from pathlib import Path
 
+import httpx2  # pyright: ignore[reportMissingImports]
 import pytest
 
 from llmbench.config.experiment import ModelSpec
-from llmbench.hub.client import RemoteFile, RepoListing
+from llmbench.hub.client import HubUnavailableError, HuggingFaceClient, RemoteFile, RepoListing
 from llmbench.hub.gguf_meta import GGUFError, read_gguf
 from llmbench.hub.refs import HfRef, RefError, parse_hf, quant_matches, shard_info
 from llmbench.hub.store import (
@@ -277,3 +278,15 @@ def test_gguf_rejects_garbage(tmp_path: Path) -> None:
     (tmp_path / "y.gguf").write_bytes(b"GGUF\x03\x00\x00\x00\x01")
     with pytest.raises(GGUFError, match="truncated"):
         read_gguf(tmp_path / "y.gguf")
+
+
+def test_network_errors_mean_unavailable_not_crash(monkeypatch: pytest.MonkeyPatch) -> None:
+    """huggingface_hub 2.x raises httpx2 errors (e.g. behind a blocking proxy)."""
+    client = HuggingFaceClient()
+
+    def boom(*_: object, **__: object) -> None:
+        raise httpx2.ProxyError("403 Forbidden")
+
+    monkeypatch.setattr(client.api, "model_info", boom)
+    with pytest.raises(HubUnavailableError, match="403"):
+        client.list_repo("o/r", None)

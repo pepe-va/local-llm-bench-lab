@@ -56,7 +56,10 @@ def load_hf_dataset(spec: HfDataset) -> LoadedDataset:
         )
     rows: list[dict[str, Any]] = []
     for f in wanted:
-        local = hf_hub_download(spec.repo, f, repo_type="dataset", revision=commit)
+        try:
+            local = hf_hub_download(spec.repo, f, repo_type="dataset", revision=commit)
+        except Exception as e:  # network/auth: report, never crash the suite
+            raise DatasetError(f"{spec.repo}: cannot download {f} ({e})") from None
         rows += read_table(Path(str(local)))
     if spec.shuffle_seed is not None:
         random.Random(spec.shuffle_seed).shuffle(rows)
