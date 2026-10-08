@@ -1,6 +1,6 @@
 [project]
 name = "local-llm-bench-lab"
-version = "0.9.1"
+version = "0.10.0"
 description = "Reproducible benchmarking lab for local LLMs on llama.cpp"
 readme = "README.md"
 requires-python = ">=3.12"

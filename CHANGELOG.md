@@ -5,6 +5,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-08
+
+Completes the plan's statistics: every llama-bench test now carries its interquartile range and a 95% confidence interval.
+
+### Added
+
+- IQR and a 95% percentile-bootstrap confidence interval of the mean (`avg_ts`) for every llama-bench test. The bootstrap uses a fixed seed (10,000 resamples), so the same samples always give the same interval. Both are empty for a single repetition (ADR-0020).
+- The interval, median and IQR appear in `llb run` output, the HTML and Markdown reports, the dashboard and `summary.csv` (`ci_low_ts`, `ci_high_ts`, `iqr_ts`). Whiskers on the llama-bench chart now show the 95% CI instead of ±1 standard deviation.
+- Gate metrics `tps_ci_low:<test>` and `tps_ci_high:<test>`, for conservative thresholds such as "the lower bound of tg128 is at least 8 t/s".
+- Migration `0006_measurement_spread.sql`. When an existing results database is upgraded, the new columns are filled in from the stored samples, so old runs get the interval too.
+
 ## [0.9.1] - 2026-10-08
 
 First full run on a PC with a real build (`llb llama build --ref b11507`) and a real model (Qwen3-0.6B Q4_K_M vs Q8_0): 20/20 runs across every phase.
@@ -199,7 +210,8 @@ Phase 0: project skeleton.
 - ruff, basedpyright (strict), pytest, pre-commit, and GitHub Actions on x86_64 and arm64.
 - Project proposal (`docs/PRD.md`) and plan (`docs/PLAN.md`).
 
-[Unreleased]: https://github.com/OWNER/local-llm-bech-lab/compare/v0.9.1...HEAD
+[Unreleased]: https://github.com/OWNER/local-llm-bech-lab/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/OWNER/local-llm-bech-lab/compare/v0.9.1...v0.10.0
 [0.9.1]: https://github.com/OWNER/local-llm-bech-lab/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/OWNER/local-llm-bench-lab/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/OWNER/local-llm-bench-lab/compare/v0.7.0...v0.8.0

@@ -1299,7 +1299,7 @@ api = [
 
 [[package]]
 name = "local-llm-bench-lab"
-version = "0.9.1"
+version = "0.10.0"
 source = { editable = "." }
 dependencies = [
     { name = "httpx" },

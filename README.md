@@ -15,7 +15,7 @@ Reproducible benchmarking lab for local LLMs on [llama.cpp](https://github.com/g
 - **Serving and standard benchmarks**: concurrent load (req/s, aggregate tokens/s, p95), lm-evaluation-harness against the same server, and an optional LLM judge whose scores are kept apart from objective ones.
 - **Dashboard**: `llb serve`, a read-only web UI with live progress, charts, gates and per-run detail.
 
-> Status: **v0.9.0**: every phase of the [plan](docs/PLAN.md) is implemented. 1.0.0 will follow validation on a Raspberry Pi 5. See [CHANGELOG](CHANGELOG.md).
+> Status: **v0.10.0**: every phase of the [plan](docs/PLAN.md) is implemented, including per-test confidence intervals. 1.0.0 will follow validation on a Raspberry Pi 5. See [CHANGELOG](CHANGELOG.md).
 
 ## Quick start
 
