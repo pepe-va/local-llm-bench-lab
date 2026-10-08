@@ -11,9 +11,10 @@ Reproducible benchmarking lab for local LLMs on [llama.cpp](https://github.com/g
 - **Quality suites**: own prompts (a Spanish writing suite is included), files or Hugging Face datasets, scored by deterministic evaluators (exact, contains, regex, numeric extraction, length, JSON schema, composites).
 - **Gates and guidance**: pass/fail thresholds per configuration, the winner, and a ready-to-run `llama-server` command; reports in HTML (offline charts), Markdown and PNG.
 - **Modalities**: embeddings (Spearman against labels), reranking (nDCG, MRR) and vision (models with an `mmproj`).
+- **Serving and standard benchmarks**: concurrent load (req/s, aggregate tokens/s, p95), lm-evaluation-harness against the same server, and an optional LLM judge whose scores are kept apart from objective ones.
 - Planned: HTML/Markdown/PNG reports, pass/fail gates, and embeddings/rerank/vision. See the [roadmap](docs/PLAN.md#roadmap-de-implementación).
 
-> Status: **v0.7.0** (Phase 6, embeddings, rerank and vision). See [CHANGELOG](CHANGELOG.md).
+> Status: **v0.8.0** (Phase 7, serving, lm-eval and LLM judge). See [CHANGELOG](CHANGELOG.md).
 
 ## Quick start
 

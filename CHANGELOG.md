@@ -5,6 +5,23 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-08
+
+Phase 7: serving, lm-evaluation-harness and LLM judge.
+
+### Added
+
+- `phases.serving`: closed-loop concurrent load, one run per `concurrency` level. Reports requests/s, aggregate prompt and generation tokens/s, TTFT, ITL and end-to-end latency (p50/p95) and the error rate. `server.parallel` is raised to `max(concurrency)` when lower. Writes `serving.csv`.
+- `phases.lm_eval`: runs lm-evaluation-harness (`local-chat-completions` or `local-completions`) against each configuration's llama-server and flattens its results into `lm_eval:<task>.<metric>` metrics. Optional extra `lm-eval`.
+- `phases.judge` and `llb judge [--force]`: an LLM judge scores responses with `llm_judge` evaluator parts (1-5 per criterion, JSON constrained by a schema), stored apart in `judge_scores` with the judge's identity. Adds `judge.<criterion>_mean` and `judge.overall_mean` metrics.
+- Serving and lm-eval sections in reports (table plus a throughput-vs-concurrency chart). Judge scores are labeled as subjective.
+- Example `serving.yaml`, and a judge (and optional lm-eval) in `quality-es.yaml`.
+- Database migration 0005. ADR-0018.
+
+### Changed
+
+- CI installs only the `report` and `hf-datasets` extras (lm-eval is heavy and is tested with a fake executable).
+
 ## [0.7.0] - 2026-10-08
 
 Phase 6: modalities.
@@ -151,7 +168,8 @@ Phase 0: project skeleton.
 - ruff, basedpyright (strict), pytest, pre-commit, and GitHub Actions on x86_64 and arm64.
 - Project proposal (`docs/PRD.md`) and plan (`docs/PLAN.md`).
 
-[Unreleased]: https://github.com/OWNER/local-llm-bench-lab/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/OWNER/local-llm-bench-lab/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/OWNER/local-llm-bench-lab/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/OWNER/local-llm-bench-lab/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/OWNER/local-llm-bench-lab/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/OWNER/local-llm-bench-lab/compare/v0.4.0...v0.5.0
