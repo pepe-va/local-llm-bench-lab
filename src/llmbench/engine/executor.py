@@ -9,10 +9,17 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
 
-from llmbench.config.experiment import Experiment
+from llmbench.config.experiment import Experiment, ModelSpec
 from llmbench.engine import env as envmod
 from llmbench.engine.planner import Plan, RunSpec, fingerprint
-from llmbench.hub.store import ModelNotFoundError, resolve_model
+from llmbench.hub.gguf_meta import GGUFError, read_gguf
+from llmbench.hub.store import (
+    ModelNotFoundError,
+    ModelStore,
+    ResolvedModel,
+    combined_sha256,
+    model_info,
+)
 from llmbench.llamacpp import builds
 from llmbench.llamacpp.argv import bench_argv
 from llmbench.llamacpp.bench import BenchError, run_bench
@@ -52,6 +59,62 @@ class _Model:
     path: Path
     sha256: str
     info: dict[str, Any]
+    resolved: ResolvedModel
+
+
+class _Models:
+    """Resolve each model right before its first run and release it after its last.
+
+    On a Pi with little disk this keeps at most one downloaded model around when
+    `retention: delete_after_run` is set.
+    """
+
+    def __init__(self, plan: Plan, store: Store, models: ModelStore, events: Events) -> None:
+        self._store = store
+        self._models = models
+        self._events = events
+        self._cache: dict[str, _Model | None] = {}
+        self._last: dict[str, int] = {r.model.id: i for i, r in enumerate(plan.runs)}
+
+    def get(self, spec: ModelSpec) -> _Model | None:
+        if spec.id not in self._cache:
+            self._cache[spec.id] = self._resolve(spec)
+        return self._cache[spec.id]
+
+    def done_with(self, index: int, spec: ModelSpec) -> None:
+        model = self._cache.get(spec.id)
+        if model is None or self._last[spec.id] != index or spec.retention != "delete_after_run":
+            return
+        freed = self._models.release(model.resolved)
+        if freed:
+            self._events.log(f"model {spec.id}: removed from the HF cache ({freed / 1e9:.2f} GB)")
+
+    def _resolve(self, spec: ModelSpec) -> _Model | None:
+        try:
+            resolved = self._models.resolve(spec)
+            meta = read_gguf(resolved.shards).summary()
+        except (ModelNotFoundError, GGUFError) as e:
+            self._events.log(f"[error] {e}")
+            return None
+        if resolved.sha256 is not None:
+            digest = resolved.sha256
+            if len(resolved.shards) == 1:
+                self._store.remember_sha256(resolved.path, digest)
+        else:
+            self._events.log(f"model {spec.id}: hashing {resolved.path.name}...")
+            digest = combined_sha256([self._store.model_sha256(p) for p in resolved.shards])
+        if spec.sha256 is not None and spec.sha256 != digest:
+            self._events.log(f"[error] model {spec.id!r}: sha256 mismatch (expected {spec.sha256})")
+            return None
+        where = (
+            f"{resolved.repo}@{resolved.commit[:12]}" if resolved.repo and resolved.commit else ""
+        )
+        self._events.log(
+            f"model {spec.id}: {resolved.path.name} {where} ({resolved.origin}, "
+            f"{meta['quant']}, {meta['n_params'] / 1e9:.2f}B params)"
+        )
+        info = model_info(resolved, digest) | {"gguf": meta}
+        return _Model(resolved.path, digest, info, resolved)
 
 
 def output_dir(exp: Experiment) -> Path:
@@ -67,6 +130,7 @@ def execute(
     *,
     resume: bool = False,
     auto_build: bool = True,
+    model_store: ModelStore | None = None,
 ) -> ExecutionSummary:
     out = output_dir(exp)
     summary = ExecutionSummary(out)
@@ -79,11 +143,11 @@ def execute(
     try:
         machine = envmod.snapshot()
         resolved = _resolve_builds(exp, events, auto_build=auto_build)
-        models = _resolve_models(exp, plan, store, events)
+        models = _Models(plan, store, model_store or ModelStore(log=events.log), events)
         total = len(plan.runs)
         for i, spec in enumerate(plan.runs, 1):
             rb = resolved.get(spec.build.id)
-            model = models.get(spec.model.id)
+            model = models.get(spec.model) if rb is not None else None
             if rb is None or model is None:
                 summary.failed += 1
                 events.run_skipped(i, total, spec, "build or model could not be resolved")
@@ -100,6 +164,7 @@ def execute(
                 total=total,
                 resume=resume,
             )
+            models.done_with(i - 1, spec.model)
             if status == "skipped":
                 summary.skipped += 1
             elif status == "completed":
@@ -134,30 +199,6 @@ def _resolve_builds(
             events.log(f"build {spec.id}: {rb.version} @ {rb.commit[:12]} ({rb.backend})")
         except (builds.BuildError, IntrospectionError) as e:
             events.log(f"[error] {e}")
-    return out
-
-
-def _resolve_models(exp: Experiment, plan: Plan, store: Store, events: Events) -> dict[str, _Model]:
-    out: dict[str, _Model] = {}
-    for spec in {r.model.id: r.model for r in plan.runs}.values():
-        try:
-            path = resolve_model(spec)
-        except ModelNotFoundError as e:
-            events.log(f"[error] {e}")
-            continue
-        events.log(f"model {spec.id}: hashing {path.name}...")
-        digest = store.model_sha256(path)
-        if spec.sha256 is not None and spec.sha256 != digest:
-            events.log(f"[error] model {spec.id!r}: sha256 mismatch (expected {spec.sha256})")
-            continue
-        info = {
-            "id": spec.id,
-            "source": spec.source,
-            "path": str(path),
-            "sha256": digest,
-            "size": path.stat().st_size,
-        }
-        out[spec.id] = _Model(path, digest, info)
     return out
 
 

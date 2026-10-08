@@ -6,7 +6,7 @@ from typing import Annotated
 import typer
 
 from llmbench import __version__
-from llmbench.cli import llama
+from llmbench.cli import llama, models
 from llmbench.cli.common import console
 from llmbench.cli.plan import plan
 from llmbench.cli.run import run
@@ -22,6 +22,7 @@ app.command()(validate)
 app.command()(plan)
 app.command()(run)
 app.add_typer(llama.app, name="llama")
+app.add_typer(models.app, name="models")
 
 
 def _version_callback(value: bool) -> None:

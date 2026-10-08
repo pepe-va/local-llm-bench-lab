@@ -9,6 +9,7 @@ import pytest
 from typer.testing import CliRunner, Result
 
 from llmbench.cli.app import app
+from tests.helpers import FakeHub
 
 pytestmark = pytest.mark.integration
 runner = CliRunner()
@@ -112,8 +113,66 @@ def test_missing_model_does_not_crash(tmp_path: Path, fake_bin_dir: Path) -> Non
     assert "file not found" in out(r)
 
 
-def test_hf_source_is_explained(tmp_path: Path, fake_bin_dir: Path) -> None:
+def test_hf_model_is_downloaded_once_and_released(
+    tmp_path: Path, fake_bin_dir: Path, hub: FakeHub
+) -> None:
     exp = experiment(tmp_path, fake_bin_dir, Path("x"))
-    exp.write_text(exp.read_text().replace("source: x", "source: hf://org/repo:Q4_K_M"))
+    exp.write_text(
+        exp.read_text()
+        .replace(
+            "source: x",
+            "source: 'hf://unsloth/Qwen3-1.7B-GGUF:Q4_K_M', retention: delete_after_run",
+        )
+        .replace("kv.cache_type_k: [f16, q4_0]", "kv.cache_type_k: [f16]")
+    )
     r = runner.invoke(app, ["validate", str(exp)])
-    assert "Phase 2" in out(r)
+    assert "is not downloaded" in out(r)  # validate never downloads
+
+    r = runner.invoke(app, ["run", "-y", str(exp)])
+    assert r.exit_code == 0, out(r)
+    assert hub.downloads == ["unsloth/Qwen3-1.7B-GGUF/Qwen3-1.7B-Q4_K_M.gguf"]
+    assert "removed from the HF cache" in out(r)
+    assert hub.cached_files() == []
+
+    db = sqlite3.connect(tmp_path / "out" / "benchmark.sqlite")
+    model = json.loads(db.execute("SELECT model FROM runs LIMIT 1").fetchone()[0])
+    assert model["repo"] == "unsloth/Qwen3-1.7B-GGUF"
+    assert model["commit"] == hub.repos["unsloth/Qwen3-1.7B-GGUF"].commit
+    # identity comes from the Hub's LFS sha256, not from hashing the file
+    assert (
+        model["sha256"]
+        == hub.repos["unsloth/Qwen3-1.7B-GGUF"]
+        .files[
+            [f.name for f in hub.repos["unsloth/Qwen3-1.7B-GGUF"].files].index(
+                "Qwen3-1.7B-Q4_K_M.gguf"
+            )
+        ]
+        .sha256
+    )
+    assert model["gguf"]["architecture"] == "llama"
+
+
+def test_models_cli(tmp_path: Path, hub: FakeHub) -> None:
+    ref = "hf://unsloth/Qwen3-1.7B-GGUF:Q4_K_M"
+    r = runner.invoke(app, ["models", "pull", ref])
+    assert r.exit_code == 0, out(r)
+    assert "(download" in out(r)
+
+    r = runner.invoke(app, ["models", "inspect", ref])
+    assert r.exit_code == 0, out(r)
+    assert "architecture llama" in out(r)
+
+    r = runner.invoke(app, ["models", "favorite", ref])
+    assert r.exit_code == 0, out(r)
+    r = runner.invoke(app, ["models", "ls"])
+    assert "★" in out(r)
+    assert "Qwen3-1.7B-Q4_K_M.gguf" in r.output.replace("\n", "").replace("│", "").replace(" ", "")
+
+    r = runner.invoke(app, ["models", "unfavorite", "-y", ref])
+    assert r.exit_code == 0, out(r)
+    r = runner.invoke(app, ["models", "prune", "--dry-run"])
+    assert "nothing to prune" in out(r)
+
+    r = runner.invoke(app, ["models", "pull", "hf://unsloth/Qwen3-1.7B-GGUF:Q9_X"])
+    assert r.exit_code == 1
+    assert "no GGUF matches" in out(r)

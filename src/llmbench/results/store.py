@@ -148,6 +148,15 @@ class Store:
 
     # -- model hashes ------------------------------------------------------
 
+    def remember_sha256(self, path: Path, digest: str) -> None:
+        """Record a hash known from elsewhere (e.g. the Hub's LFS metadata)."""
+        st = path.stat()
+        with self.db:
+            self.db.execute(
+                "INSERT OR REPLACE INTO model_hashes VALUES (?,?,?,?)",
+                (str(path.resolve()), st.st_size, st.st_mtime_ns, digest),
+            )
+
     def model_sha256(self, path: Path) -> str:
         st = path.stat()
         key = str(path.resolve())

@@ -8,7 +8,7 @@ experiment:
 
 models:
   - id: qwen3-1.7b-q4km
-    source: Qwen3-1.7B-Q4_K_M.gguf
+    source: hf://unsloth/Qwen3-1.7B-GGUF:Q4_K_M
 
 defaults:
   load: { threads: 4, batch_size: 512, ubatch_size: 256, flash_attn: "on" }

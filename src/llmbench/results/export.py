@@ -13,6 +13,9 @@ CSV_COLUMNS = [
     "experiment",
     "status",
     "model_id",
+    "model_quant",
+    "model_params",
+    "model_commit",
     "build_id",
     "build_commit",
     "variant",
@@ -61,10 +64,15 @@ def _csv_row(r: dict[str, Any]) -> dict[str, Any]:
     cfg = json.loads(r["config"])
     tel: dict[str, Any] = json.loads(r["telemetry"]) if r["telemetry"] else {}
     variant = json.loads(r["variant"])
+    model: dict[str, Any] = json.loads(r["model"])
+    gguf: dict[str, Any] = model.get("gguf") or {}
     return {
         "experiment": r["experiment"],
         "status": r["status"],
         "model_id": r["model_id"],
+        "model_quant": gguf.get("quant"),
+        "model_params": gguf.get("n_params"),
+        "model_commit": (model.get("commit") or "")[:12],
         "build_id": r["build_id"],
         "build_commit": r["build_commit"],
         "variant": ";".join(f"{k}={v}" for k, v in variant.items()),

@@ -1,0 +1,317 @@
+{
+ "unsloth/Qwen3-1.7B-GGUF": {
+  "sha": "d7f544eead698dbd1f15126ef60b45a1e1933222",
+  "files": [
+   {
+    "name": ".gitattributes",
+    "size": 3135,
+    "sha256": null
+   },
+   {
+    "name": "Qwen3-1.7B-BF16.gguf",
+    "size": 3447349568,
+    "sha256": "3412cc86f04dd7b49cb5fe05249690a95d643ee0f1f980cd5e777a8f40eb37f9"
+   },
+   {
+    "name": "Qwen3-1.7B-IQ4_NL.gguf",
+    "size": 1054423616,
+    "sha256": "54d4991db0f405c5d81c41a22094026cbc37bb2ee445b551bb1754204b5cb680"
+   },
+   {
+    "name": "Qwen3-1.7B-IQ4_XS.gguf",
+    "size": 1010383424,
+    "sha256": "a02e41d3208e97a7cb224297e8d3abb22e5bb8d664362c6be4f48948a3797eec"
+   },
+   {
+    "name": "Qwen3-1.7B-Q2_K.gguf",
+    "size": 777796160,
+    "sha256": "62b3fb705434cb57fabc59d59aa7b4c6fb558fff7c7c4b2ce67456373bc30fd3"
+   },
+   {
+    "name": "Qwen3-1.7B-Q2_K_L.gguf",
+    "size": 777796160,
+    "sha256": "62b3fb705434cb57fabc59d59aa7b4c6fb558fff7c7c4b2ce67456373bc30fd3"
+   },
+   {
+    "name": "Qwen3-1.7B-Q3_K_M.gguf",
+    "size": 939539008,
+    "sha256": "8070f21b9763ef653289e20252592d0aab6680948f36eb5b4362d403fef09170"
+   },
+   {
+    "name": "Qwen3-1.7B-Q3_K_S.gguf",
+    "size": 867252800,
+    "sha256": "b6afc9f02da55f66c086ac00bc4483b7bb89bbfad87fc93602d359151362bf2d"
+   },
+   {
+    "name": "Qwen3-1.7B-Q4_0.gguf",
+    "size": 1056782912,
+    "sha256": "c876f159707a4e4f70e045106c69db15bfc935a4981706fd4f65c6e7ea1e81c5"
+   },
+   {
+    "name": "Qwen3-1.7B-Q4_1.gguf",
+    "size": 1142504000,
+    "sha256": "3f6d4269abd6e61cda9962b0363f7ddc06f1186f27baa9c9e51d3dd309b02146"
+   },
+   {
+    "name": "Qwen3-1.7B-Q4_K_M.gguf",
+    "size": 1107409472,
+    "sha256": "b139949c5bd74937ad8ed8c8cf3d9ffb1e99c866c823204dc42c0d91fa181897"
+   },
+   {
+    "name": "Qwen3-1.7B-Q4_K_S.gguf",
+    "size": 1060190784,
+    "sha256": "71eed840867db10f14b3332e3e0bf0a36b98b762c5b0bf9e091a3e00ecd21805"
+   },
+   {
+    "name": "Qwen3-1.7B-Q5_K_M.gguf",
+    "size": 1257880128,
+    "sha256": "b0949de5b2e06cbed6aa96517f9bd8afb334584b6f95ee83479292ff4bdd8ed3"
+   },
+   {
+    "name": "Qwen3-1.7B-Q5_K_S.gguf",
+    "size": 1230584384,
+    "sha256": "43dc60ef9b7d27e43a61c05e13941503ab6d86944c306ef5207f164cb47cc982"
+   },
+   {
+    "name": "Qwen3-1.7B-Q6_K.gguf",
+    "size": 1417755200,
+    "sha256": "6a9cadec4883df6f3efcf337103479dcc6a3efa9f5f8cc64a904dba57808207a"
+   },
+   {
+    "name": "Qwen3-1.7B-Q8_0.gguf",
+    "size": 1834426944,
+    "sha256": "0becaa825564295d82e9af4d008bca5f8b7f5f73bf1c6a0b58f7c53ef26b47fd"
+   },
+   {
+    "name": "Qwen3-1.7B-UD-IQ1_M.gguf",
+    "size": 561947200,
+    "sha256": "77d1aceec4f28c45328d98ef58eefdbf5643da3513b7e777ad311b5014a58739"
+   },
+   {
+    "name": "Qwen3-1.7B-UD-IQ1_S.gguf",
+    "size": 537829952,
+    "sha256": "762cff2d202b1f0af82ba840ba4a66b16b6268d10d72b7ef5bfabda080051ad3"
+   },
+   {
+    "name": "Qwen3-1.7B-UD-IQ2_M.gguf",
+    "size": 708715072,
+    "sha256": "0616ab2f6543a28e119bf3e7a24c5c7686b86b16fae69bea81b457c30506d358"
+   },
+   {
+    "name": "Qwen3-1.7B-UD-IQ2_XXS.gguf",
+    "size": 605790784,
+    "sha256": "bcd3ccb440bb1e57c49e48e69c2fe790a3cd4682f8a6f128fcd1e2222102c6fc"
+   },
+   {
+    "name": "Qwen3-1.7B-UD-IQ3_XXS.gguf",
+    "size": 765174336,
+    "sha256": "7727d3c027da39d72f846038cad89456cab0866ee4a5328f9aced19e3d850e86"
+   },
+   {
+    "name": "Qwen3-1.7B-UD-Q2_K_XL.gguf",
+    "size": 797866560,
+    "sha256": "4a76542930ebab924832e9fe5d1970122564c026411162ee48a4d503b1a16f5f"
+   },
+   {
+    "name": "Qwen3-1.7B-UD-Q3_K_XL.gguf",
+    "size": 968899136,
+    "sha256": "21499d25b4dfc46066caaeef39fff5b43a4bfab80aef7c70d1db1a31ec02ed58"
+   },
+   {
+    "name": "Qwen3-1.7B-UD-Q4_K_XL.gguf",
+    "size": 1132952128,
+    "sha256": "01977643b1d7292d09eb6ef75c7af8b084a3bbf2cb4e1d128ab76adeb8d75490"
+   },
+   {
+    "name": "Qwen3-1.7B-UD-Q5_K_XL.gguf",
+    "size": 1262991936,
+    "sha256": "f2d3ad6203939ffcf169ac9fe4f7d7430ce227e024395850cd878fe646912c08"
+   },
+   {
+    "name": "Qwen3-1.7B-UD-Q6_K_XL.gguf",
+    "size": 1610949184,
+    "sha256": "9e7232c93d12498a74a19826c367681314d86d5e468dacc6afe24bc6adbd7754"
+   },
+   {
+    "name": "Qwen3-1.7B-UD-Q8_K_XL.gguf",
+    "size": 2332582464,
+    "sha256": "7da8dded81945002c1024cb71cc95b6cc5013b82289353f352a47c99395de65c"
+   },
+   {
+    "name": "README.md",
+    "size": 17080,
+    "sha256": null
+   },
+   {
+    "name": "config.json",
+    "size": 757,
+    "sha256": null
+   },
+   {
+    "name": "imatrix_unsloth.dat",
+    "size": 2070884,
+    "sha256": "e85aa84d17c17a4d9d3add356d675c9cdcadd7a7bf5871580a92e266df0da803"
+   },
+   {
+    "name": "params",
+    "size": 178,
+    "sha256": null
+   },
+   {
+    "name": "template",
+    "size": 1482,
+    "sha256": null
+   }
+  ]
+ },
+ "ggml-org/models": {
+  "sha": "499bc8821c6b12b4e53c5bffcb21ec206f212d81",
+  "files": [
+   {
+    "name": ".gitattributes",
+    "size": 1814,
+    "sha256": null
+   },
+   {
+    "name": "README.md",
+    "size": 81,
+    "sha256": null
+   },
+   {
+    "name": "bert-bge-small/ggml-model-f16-big-endian.gguf",
+    "size": 67308128,
+    "sha256": "0e68255af91c707227f4840603bcbd0555054b921f757d79efdb2652ae8bb952"
+   },
+   {
+    "name": "bert-bge-small/ggml-model-f16.gguf",
+    "size": 67308128,
+    "sha256": "f0b2fef971e8366438bfd2d9aefea1b0115919389448806d290237f638bae999"
+   },
+   {
+    "name": "jina-reranker-v1-tiny-en/ggml-model-f16.gguf",
+    "size": 67504480,
+    "sha256": "ad9f450c1053a431e2e3746d1f9f7768fb9183cf0796e046983a3449dca093c2"
+   },
+   {
+    "name": "mel_filters.npz",
+    "size": 4271,
+    "sha256": "7450ae70723a5ef9d341e3cee628c7cb0177f36ce42c44b7ed2bf3325f0f6d4c"
+   },
+   {
+    "name": "mistral-7b-v0.2-iq3_s-imat.gguf",
+    "size": 3182393056,
+    "sha256": "b30bb276df8debca77c077b9d65b0b7fa0717740de6312e38840974cddd8813b"
+   },
+   {
+    "name": "phi-2/ggml-model-f16.gguf",
+    "size": 5563095552,
+    "sha256": "44145e7d2d931504158b6036ad15854c5434836366084b2f99ab4e5e9d4e6e1b"
+   },
+   {
+    "name": "phi-2/ggml-model-q4_0.gguf",
+    "size": 1602461536,
+    "sha256": "fd506d24a4bee6997a566b02b65715af5cadb433c6a3a47a74b467badc5727ca"
+   },
+   {
+    "name": "phi-2/ggml-model-q8_0.gguf",
+    "size": 2958032736,
+    "sha256": "26a44c5a2bc22f33a1271cdf1accb689028141a6cb12e97671740a9803d23c63"
+   },
+   {
+    "name": "tinyllama-1.1b/.gitignore",
+    "size": 0,
+    "sha256": null
+   },
+   {
+    "name": "tinyllama-1.1b/ggml-model-f16.gguf",
+    "size": 2201990016,
+    "sha256": "92982a0b96adfe5a8cea15ed6272bd11282f9a257eca74e40225becc6ae61c71"
+   },
+   {
+    "name": "tinyllamas/split/stories15M-00001-of-00003.gguf",
+    "size": 82420224,
+    "sha256": "b7f65a865470f8023edd038d0b787d8db9268abaa8a0a4e21448150772ceea33"
+   },
+   {
+    "name": "tinyllamas/split/stories15M-00002-of-00003.gguf",
+    "size": 8301440,
+    "sha256": "44af9035d52becbe1dfe47fe73109eb6d806287cd7d1e25980dbd62ea18edd1e"
+   },
+   {
+    "name": "tinyllamas/split/stories15M-00003-of-00003.gguf",
+    "size": 7636576,
+    "sha256": "34a6543e31bddf578870b1958b0a2937db1506314deaf0261c6d1e1f8db0ef21"
+   },
+   {
+    "name": "tinyllamas/split/stories15M-q8_0-00001-of-00003.gguf",
+    "size": 10517152,
+    "sha256": "8a3a74042ae05dda34985dff2d49adf2ee3f9d0fd73b03fa6cc4307c924e4040"
+   },
+   {
+    "name": "tinyllamas/split/stories15M-q8_0-00002-of-00003.gguf",
+    "size": 10381216,
+    "sha256": "4a70d35fdd275b054c29979da9c5d27e7045f011fdf11f736a652a03b1ffb355"
+   },
+   {
+    "name": "tinyllamas/split/stories15M-q8_0-00003-of-00003.gguf",
+    "size": 5773312,
+    "sha256": "b2d72a3315df3e2834be32adbbc737ca02cc443125e26bbc2cfe8695ec3814bc"
+   },
+   {
+    "name": "tinyllamas/stories15M-be.Q4_0.gguf",
+    "size": 19077344,
+    "sha256": "9aec857937849d976f30397e97eb1cabb53eb9dcb1ce4611ba8247fb5f44c65d"
+   },
+   {
+    "name": "tinyllamas/stories15M-be.Q8_0.gguf",
+    "size": 26671328,
+    "sha256": "ddaf00a2ad7ad06d1a6951f93210ada41a79fb8b5a53d2f3f26c53743c6e24aa"
+   },
+   {
+    "name": "tinyllamas/stories15M-be.gguf",
+    "size": 98357920,
+    "sha256": "55174d7a7d46f29fc6be163ccb040330c357aa727b22ec13e2c5d713e5ba5b76"
+   },
+   {
+    "name": "tinyllamas/stories15M-q4_0.gguf",
+    "size": 19077344,
+    "sha256": "66967fbece6dbe97886593fdbb73589584927e29119ec31f08090732d1861739"
+   },
+   {
+    "name": "tinyllamas/stories15M-q8_0.gguf",
+    "size": 26671328,
+    "sha256": "2eda49203f2f044f3dddf29a7dd7cc861ef5a0340f518a19613d73ba6d9c06b6"
+   },
+   {
+    "name": "tinyllamas/stories15M.gguf",
+    "size": 98357920,
+    "sha256": "61b50d457809a5194818fd22e6724b456cd7bb9a6264c52c8110684c53f3704a"
+   },
+   {
+    "name": "tinyllamas/stories260K-be.gguf",
+    "size": 1185376,
+    "sha256": "276d6f9d9050e79670a113492331dc52b3568690b03f5e633521cbed020bfc1c"
+   },
+   {
+    "name": "tinyllamas/stories260K-infill.gguf",
+    "size": 1185760,
+    "sha256": "102f2a00a5bfc56d0706467830bda9e39fa5d7df1cd55e47291dd25b4b509140"
+   },
+   {
+    "name": "tinyllamas/stories260K.gguf",
+    "size": 1185376,
+    "sha256": "270cba1bd5109f42d03350f60406024560464db173c0e387d91f0426d3bd256d"
+   },
+   {
+    "name": "yolo/dog.jpg",
+    "size": 163759,
+    "sha256": null
+   },
+   {
+    "name": "yolo/yolov3-tiny.weights",
+    "size": 35434956,
+    "sha256": "dccea06f59b781ec1234ddf8d1e94b9519a97f4245748a7d4db75d5b7080a42c"
+   }
+  ]
+ }
+}

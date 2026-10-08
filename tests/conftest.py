@@ -1,10 +1,10 @@
-import os
 import stat
 from pathlib import Path
 
 import pytest
 
 from llmbench.llamacpp.introspect import binary_flags, binary_version
+from tests.helpers import FakeHub, write_gguf
 
 FIXTURES = Path(__file__).parent / "fixtures"
 LLAMACPP = FIXTURES / "llamacpp" / "c811cb8"
@@ -16,6 +16,9 @@ def _isolated_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Never touch the real $LLB_HOME or ./models from tests."""
     monkeypatch.setenv("LLB_HOME", str(tmp_path / "llbhome"))
     monkeypatch.setenv("LLB_MODELS_DIR", str(tmp_path / "models"))
+    # tests never reach the network; a real Hub client would fail fast in offline mode
+    monkeypatch.setenv("HF_HUB_OFFLINE", "1")
+    monkeypatch.setenv("HF_HOME", str(tmp_path / "hf"))
     binary_flags.cache_clear()
     binary_version.cache_clear()
 
@@ -39,6 +42,12 @@ def fake_bin_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 @pytest.fixture
 def tiny_model(tmp_path: Path) -> Path:
-    p = tmp_path / "tiny.gguf"
-    p.write_bytes(b"GGUF" + os.urandom(64))
-    return p
+    return write_gguf(tmp_path / "tiny.gguf", {"general.file_type": 15, "general.name": "tiny"})
+
+
+@pytest.fixture
+def hub(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> FakeHub:
+    """In-memory Hub (real listings captured from huggingface.co) used by every ModelStore."""
+    fake = FakeHub.from_fixture(tmp_path / "hf-cache")
+    monkeypatch.setattr("llmbench.hub.store.HuggingFaceClient", lambda: fake)
+    return fake

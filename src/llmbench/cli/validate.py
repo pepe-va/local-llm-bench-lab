@@ -1,7 +1,7 @@
 from llmbench.cli.common import ExperimentArg, console, fail, load
 from llmbench.config.matrix import apply_variant
 from llmbench.engine.planner import make_plan
-from llmbench.hub.store import ModelNotFoundError, resolve_model
+from llmbench.hub.store import ModelNotFoundError, ModelStore
 from llmbench.llamacpp import builds
 from llmbench.llamacpp.argv import bench_argv
 from llmbench.llamacpp.introspect import IntrospectionError, binary_flags, unknown_flags
@@ -13,10 +13,12 @@ def validate(experiment: ExperimentArg) -> None:
     console.print(f"[green]✓[/] schema and matrix ({len(exp.matrix.expand())} variants)")
     problems = 0
 
+    models = ModelStore(allow_download=False)
     for m in exp.enabled_models:
         try:
-            path = resolve_model(m)
-            console.print(f"[green]✓[/] model {m.id}: {path}")
+            r = models.resolve(m)
+            where = f" ({r.repo}@{r.commit[:12]}, {r.origin})" if r.repo and r.commit else ""
+            console.print(f"[green]✓[/] model {m.id}: {r.path}{where}")
         except ModelNotFoundError as e:
             problems += 1
             console.print(f"[red]✗[/] {e}")

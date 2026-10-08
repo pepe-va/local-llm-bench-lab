@@ -1,12 +1,13 @@
 [project]
 name = "local-llm-bench-lab"
-version = "0.2.0"
+version = "0.3.0"
 description = "Reproducible benchmarking lab for local LLMs on llama.cpp"
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }
 dependencies = [
     "httpx>=0.28",
+    "huggingface-hub>=0.34",
     "psutil>=7.0",
     "pydantic>=2.11",
     "rich>=14.0",
@@ -15,7 +16,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-hf = ["huggingface-hub>=0.34", "gguf>=0.17"]
 hf-datasets = ["datasets>=4.0"]
 report = ["jinja2>=3.1", "plotly>=6.0", "matplotlib>=3.10"]
 parquet = ["pyarrow>=21.0"]
