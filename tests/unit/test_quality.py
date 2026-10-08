@@ -270,3 +270,13 @@ def test_quality_metrics() -> None:
     assert m["score_mean:x"] == 0.75
     assert "score_mean:y" not in m
     assert m["words_per_s_mean"] == pytest.approx((2 + 1 + 0) / 3)
+
+
+def test_contains_any_that_passes_has_no_failure_detail() -> None:
+    assert ev(
+        {"type": "contains", "values": ["3 millones", "tres millones"], "mode": "any"}, "3 millones"
+    ) == (
+        1.0,
+        True,
+        "",
+    )

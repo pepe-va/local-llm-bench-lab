@@ -51,7 +51,8 @@ def evaluate(spec: EvaluatorSpec, output: str, req: Request) -> Score:  # noqa: 
             hits = [v for v in spec.values if _has(output, v, spec.case_sensitive)]
             ok = len(hits) == len(spec.values) if spec.mode == "all" else bool(hits)
             missing = [v for v in spec.values if v not in hits]
-            return Score(len(hits) / len(spec.values), ok, f"missing {missing}" if missing else "")
+            value = 1.0 if ok and spec.mode == "any" else len(hits) / len(spec.values)
+            return Score(value, ok, "" if ok else f"missing {missing}")
         case NotContains():
             found = [v for v in spec.values if _has(output, v, spec.case_sensitive)]
             return _bool(not found, f"found forbidden {found}" if found else "")
