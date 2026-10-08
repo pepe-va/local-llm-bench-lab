@@ -5,6 +5,25 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-08
+
+Phase 8: dashboard. Every phase of the plan is now implemented.
+
+### Added
+
+- `llb serve`: read-only web dashboard (FastAPI + Jinja2 + HTMX, extra `serve`) over one or more results directories.
+  - Experiment list.
+  - Per-experiment page with the same charts and tables as `llb report`, plus gates when given the experiment YAML.
+  - Live run list refreshed every 3 s while `llb run` writes.
+  - Run detail with measurements, metrics, a telemetry chart, requests, judge scores and the full config, argv and environment.
+  - JSON API (`/api/...`, OpenAPI at `/api/docs`).
+- htmx is bundled and plotly.js is served from the package, so the dashboard works without Internet access. It binds to 127.0.0.1 by default and warns otherwise.
+- ADR-0019.
+
+### Changed
+
+- CI installs the `serve` extra too.
+
 ## [0.8.0] - 2026-10-08
 
 Phase 7: serving, lm-evaluation-harness and LLM judge.
@@ -168,7 +187,8 @@ Phase 0: project skeleton.
 - ruff, basedpyright (strict), pytest, pre-commit, and GitHub Actions on x86_64 and arm64.
 - Project proposal (`docs/PRD.md`) and plan (`docs/PLAN.md`).
 
-[Unreleased]: https://github.com/OWNER/local-llm-bench-lab/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/OWNER/local-llm-bench-lab/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/OWNER/local-llm-bench-lab/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/OWNER/local-llm-bench-lab/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/OWNER/local-llm-bench-lab/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/OWNER/local-llm-bench-lab/compare/v0.5.0...v0.6.0

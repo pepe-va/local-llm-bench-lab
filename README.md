@@ -12,9 +12,9 @@ Reproducible benchmarking lab for local LLMs on [llama.cpp](https://github.com/g
 - **Gates and guidance**: pass/fail thresholds per configuration, the winner, and a ready-to-run `llama-server` command; reports in HTML (offline charts), Markdown and PNG.
 - **Modalities**: embeddings (Spearman against labels), reranking (nDCG, MRR) and vision (models with an `mmproj`).
 - **Serving and standard benchmarks**: concurrent load (req/s, aggregate tokens/s, p95), lm-evaluation-harness against the same server, and an optional LLM judge whose scores are kept apart from objective ones.
-- Planned: HTML/Markdown/PNG reports, pass/fail gates, and embeddings/rerank/vision. See the [roadmap](docs/PLAN.md#roadmap-de-implementación).
+- **Dashboard**: `llb serve`, a read-only web UI with live progress, charts, gates and per-run detail.
 
-> Status: **v0.8.0** (Phase 7, serving, lm-eval and LLM judge). See [CHANGELOG](CHANGELOG.md).
+> Status: **v0.9.0**: every phase of the [plan](docs/PLAN.md) is implemented. 1.0.0 will follow validation on a Raspberry Pi 5. See [CHANGELOG](CHANGELOG.md).
 
 ## Quick start
 
@@ -29,6 +29,7 @@ uv run llb run experiments/pi5-threads.yaml          # Ctrl-C safe; continue wit
 uv run llb run experiments/pi5-latency.yaml          # TTFT / ITL through llama-server
 uv run llb guide experiments/pi5-latency.yaml        # gates -> winner -> deploy command
 uv run llb report experiments/pi5-latency.yaml -f html -f png
+uv run llb serve                                     # dashboard on http://127.0.0.1:8765
 ```
 
 Results go to `~/.local/share/llmbench/runs/<experiment>/` (`benchmark.sqlite`, `summary.csv`, `latency.csv`, `runs.jsonl`, server logs) unless `output.directory` says otherwise.
@@ -69,6 +70,6 @@ uv run pytest --cov
 uv run pre-commit install
 ```
 
-Optional extras: `hf-datasets`, `report`, `parquet`, `nvidia` (`uv sync --extra report`).
+Optional extras: `report` (HTML/PNG), `serve` (dashboard), `hf-datasets` (parquet datasets), `lm-eval`, `parquet`, `nvidia` (`uv sync --extra report --extra serve`).
 
 Commits follow [Conventional Commits](https://www.conventionalcommits.org/) and releases follow [SemVer](https://semver.org/) ([ADR-0009](docs/adr/0009-conventional-commits-semver.md)).
