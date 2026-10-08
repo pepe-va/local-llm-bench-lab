@@ -12,6 +12,7 @@ from llmbench.cli.judge import judge
 from llmbench.cli.plan import plan
 from llmbench.cli.report import guide, report
 from llmbench.cli.run import run
+from llmbench.cli.serve import serve
 from llmbench.cli.validate import validate
 
 app = typer.Typer(
@@ -26,6 +27,7 @@ app.command()(run)
 app.command()(report)
 app.command()(guide)
 app.command()(judge)
+app.command()(serve)
 app.add_typer(llama.app, name="llama")
 app.add_typer(models.app, name="models")
 

@@ -1,0 +1,65 @@
+{% extends "base.html.j2" %}
+{% block title %}{{ d.experiment }} · llb{% endblock %}
+{% block head %}<script src="/static/plotly.min.js"></script>{% endblock %}
+{% block body %}
+<h1>{{ d.experiment }}</h1>
+<div class="muted">{% if d.machine %}{{ d.machine.cpu_model or d.machine.machine }} · {{ d.machine.os }} · {{ d.machine.cpu_count }} CPUs · {{ d.machine.ram_total_mb }} MB RAM{% endif %} · <code>{{ store.path }}</code></div>
+<div class="cards">
+  <div class="card"><b>{{ d.rows | length }}</b><span class="muted">configurations</span></div>
+  <div class="card"><b>{{ d.runs }}</b><span class="muted">runs</span></div>
+  <div class="card"><b class="{{ 'ko' if d.failures else '' }}">{{ d.failures | length }}</b><span class="muted">failed</span></div>
+  {% if d.verdicts %}<div class="card"><b>{{ d.verdicts | selectattr("passed") | list | length }} / {{ d.verdicts | length }}</b><span class="muted">pass all gates</span></div>{% endif %}
+</div>
+
+<h2 class="live">Latest runs</h2>
+<div hx-get="/e/{{ sid }}/{{ d.experiment }}/runs" hx-trigger="load, every 3s" hx-swap="innerHTML"><p class="muted">loading…</p></div>
+
+{% if d.verdicts %}
+<h2>Gates</h2>
+<div class="wrap"><table>
+  <tr><th></th><th>configuration</th><th>values</th><th>failed because</th></tr>
+  {% for v in d.verdicts %}
+  <tr class="{{ 'winner' if d.winner is sameas v else '' }}"><td class="{{ 'ok' if v.passed else 'ko' }}">{{ '✓' if v.passed else '✗' }}{{ ' ★' if d.winner is sameas v else '' }}</td>
+    <td>{{ v.row.label }}</td><td class="wrapcell">{% for c in v.checks %}{{ c.text }}<br>{% endfor %}</td><td class="wrapcell">{{ v.reasons | join('; ') }}</td></tr>
+  {% endfor %}
+</table></div>
+{% if d.deploy %}<h3>Recommended: {{ d.winner.row.label }}</h3><pre>{{ d.deploy.command }}</pre>{% endif %}
+{% endif %}
+
+{% for title, html in charts %}
+<h2>{{ title }}</h2><div class="chart">{{ html | safe }}</div>
+{% endfor %}
+
+{% if d.bench %}
+<h2>Bench</h2>
+<div class="wrap"><table>
+  <tr><th>model</th><th>quant</th><th>variant</th><th>test</th><th>t/s</th><th>±</th><th>cv</th><th>peak RSS MB</th><th>temp peak</th></tr>
+  {% for r in d.bench %}<tr><td>{{ r.model }}</td><td>{{ r.quant | fmt }}</td><td>{{ r.variant }}</td><td>{{ r.test }}</td><td class="num">{{ r.tps | fmt(2) }}</td><td class="num">{{ r.stddev | fmt(2) }}</td><td class="num {{ 'ko' if r.unstable else '' }}">{{ r.cv | pct }}</td><td class="num">{{ r.rss_mb | fmt(0) }}</td><td class="num">{{ r.temp_peak | fmt }}</td></tr>{% endfor %}
+</table></div>
+{% endif %}
+
+{% if d.latency %}
+<h2>Latency</h2>
+<div class="wrap"><table>
+  <tr><th>model</th><th>variant</th><th>suite</th><th>TTFT p50</th><th>TTFT p95</th><th>ITL p50</th><th>e2e p50</th><th>gen t/s</th><th>prompt t/s</th></tr>
+  {% for r in d.latency %}<tr><td>{{ r.model }}</td><td>{{ r.variant }}</td><td>{{ r.suite }}</td><td class="num">{{ r.ttft_ms_p50 | fmt }}</td><td class="num">{{ r.ttft_ms_p95 | fmt }}</td><td class="num">{{ r.itl_ms_p50 | fmt(2) }}</td><td class="num">{{ r.e2e_ms_p50 | fmt }}</td><td class="num">{{ r.gen_tps_mean | fmt }}</td><td class="num">{{ r.prompt_tps_mean | fmt }}</td></tr>{% endfor %}
+</table></div>
+{% endif %}
+
+{% if d.quality %}
+<h2>Quality</h2>
+<p class="muted">Objective scores 0-1; judge scores 1-5 are subjective (LLM-as-judge).</p>
+<div class="wrap"><table>
+  <tr><th>model</th><th>variant</th><th>suite</th><th>score</th><th>pass</th><th>judge</th><th>spearman</th><th>nDCG</th><th>MRR</th></tr>
+  {% for r in d.quality %}<tr><td>{{ r.model }}</td><td>{{ r.variant }}</td><td>{{ r.suite }}</td><td class="num">{{ r.score_mean | fmt(3) }}</td><td class="num">{{ r.pass_rate | pct }}</td><td class="num">{{ r['judge.overall_mean'] | fmt(2) }}</td><td class="num">{{ r.spearman | fmt(3) }}</td><td class="num">{{ r.ndcg | fmt(3) }}</td><td class="num">{{ r.mrr | fmt(3) }}</td></tr>{% endfor %}
+</table></div>
+{% endif %}
+
+{% if d.serving %}
+<h2>Serving</h2>
+<div class="wrap"><table>
+  <tr><th>model</th><th>variant</th><th>suite</th><th>c</th><th>req/s</th><th>gen t/s aggregate</th><th>TTFT p95</th><th>e2e p95</th><th>errors</th></tr>
+  {% for r in d.serving %}<tr><td>{{ r.model }}</td><td>{{ r.variant }}</td><td>{{ r.suite }}</td><td class="num">{{ r.c }}</td><td class="num">{{ r.requests_per_s | fmt(2) }}</td><td class="num">{{ r.gen_tps_aggregate | fmt }}</td><td class="num">{{ r.ttft_ms_p95 | fmt }}</td><td class="num">{{ r.e2e_ms_p95 | fmt }}</td><td class="num">{{ r.error_rate | pct }}</td></tr>{% endfor %}
+</table></div>
+{% endif %}
+{% endblock %}

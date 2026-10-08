@@ -1,0 +1,17 @@
+{% extends "base.html.j2" %}
+{% block body %}
+<h1>Experiments</h1>
+<p class="muted">Results found under: {% for r in roots %}<code>{{ r }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</p>
+{% if experiments %}
+<div class="wrap"><table>
+  <tr><th>experiment</th><th>phases</th><th>runs</th><th>failed</th><th>last run</th><th>store</th></tr>
+  {% for e in experiments %}
+  <tr><td><a href="/e/{{ e.sid }}/{{ e.experiment }}">{{ e.experiment }}</a></td><td>{{ e.phases }}</td>
+    <td class="num">{{ e.runs }}</td><td class="num {{ 'ko' if e.failed else '' }}">{{ e.failed }}</td>
+    <td>{{ e.last }}</td><td class="muted">{{ e.path }}</td></tr>
+  {% endfor %}
+</table></div>
+{% else %}
+<p>No results yet. Run <code>llb run experiments/&lt;name&gt;.yaml</code>, or start the dashboard with <code>--results DIR</code>.</p>
+{% endif %}
+{% endblock %}

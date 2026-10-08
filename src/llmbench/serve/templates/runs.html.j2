@@ -1,0 +1,21 @@
+<div class="wrap"><table>
+  <tr><th>#</th><th>phase</th><th>status</th><th>model</th><th>variant</th><th>suite</th><th>key result</th><th>started</th><th>duration</th></tr>
+  {% for r in runs %}
+  <tr>
+    <td><a href="/run/{{ sid }}/{{ r.id }}">{{ r.id }}</a></td><td>{{ r.phase }}{% if r.concurrency %} · c={{ r.concurrency }}{% endif %}</td>
+    <td class="{{ 'ok' if r.status == 'completed' else 'ko' }}">{{ r.status }}</td>
+    <td>{{ r.model_id }}</td>
+    <td>{% for k, v in r.variant.items() %}{{ k }}={{ v }} {% endfor %}</td>
+    <td>{{ r.suite or '' }}</td>
+    <td>
+      {% if r.measurements %}{% for m in r.measurements %}{{ m.label }} {{ m.avg_ts | fmt }} t/s{% if not loop.last %} · {% endif %}{% endfor %}
+      {% elif r.metrics.get('score_mean') is not none %}score {{ r.metrics.score_mean | fmt(3) }}
+      {% elif r.metrics.get('spearman') is not none %}spearman {{ r.metrics.spearman | fmt(3) }}
+      {% elif r.metrics.get('requests_per_s') is not none %}{{ r.metrics.requests_per_s | fmt(2) }} req/s
+      {% elif r.metrics.get('ttft_ms_p50') is not none %}TTFT p50 {{ r.metrics.ttft_ms_p50 | fmt }} ms
+      {% elif r.error %}<span class="ko">{{ r.error.splitlines()[0] }}</span>{% endif %}
+    </td>
+    <td>{{ r.started_at }}</td><td class="num">{{ r.duration_s | fmt(1) }} s</td>
+  </tr>
+  {% endfor %}
+</table></div>

@@ -1,0 +1,61 @@
+{% extends "base.html.j2" %}
+{% block title %}run {{ run.id }} · llb{% endblock %}
+{% block head %}{% if samples %}<script src="/static/plotly.min.js"></script>{% endif %}{% endblock %}
+{% block body %}
+<p><a href="/e/{{ sid }}/{{ run.experiment }}">← {{ run.experiment }}</a></p>
+<h1>Run {{ run.id }} · {{ run.phase }}{% if run.concurrency %} · c={{ run.concurrency }}{% endif %} <span class="{{ 'ok' if run.status == 'completed' else 'ko' }}">{{ run.status }}</span></h1>
+<div class="muted">{{ run.model_id }} · {{ run.build_id }} ({{ run.build_commit[:12] }}) · {% for k, v in run.variant.items() %}{{ k }}={{ v }} {% endfor %}{% if run.suite %}· {{ run.suite }}{% endif %} · {{ run.started_at }} · {{ run.duration_s | fmt(2) }} s · fingerprint <code>{{ run.fingerprint[:16] }}</code></div>
+{% if run.error %}<pre class="ko">{{ run.error }}</pre>{% endif %}
+
+{% if run.measurements %}
+<h2>Measurements</h2>
+<div class="wrap"><table><tr><th>test</th><th>t/s</th><th>±</th><th>median</th><th>cv</th><th>unstable</th></tr>
+{% for m in run.measurements %}<tr><td>{{ m.label }}</td><td class="num">{{ m.avg_ts | fmt(2) }}</td><td class="num">{{ m.stddev_ts | fmt(2) }}</td><td class="num">{{ m.median_ts | fmt(2) }}</td><td class="num">{{ m.cv | pct }}</td><td>{{ 'yes' if m.unstable else '' }}</td></tr>{% endfor %}
+</table></div>
+{% endif %}
+
+{% if run.metrics %}
+<h2>Metrics</h2>
+<div class="wrap"><table><tr><th>name</th><th>value</th></tr>
+{% for k, v in run.metrics | dictsort %}<tr><td>{{ k }}</td><td class="num">{{ v | fmt(3) }}</td></tr>{% endfor %}
+</table></div>
+{% endif %}
+
+{% if samples %}
+<h2>Telemetry</h2>
+<div class="chart" id="telemetry" style="height:320px"></div>
+<script>
+  const s = {{ samples | tojson }};
+  Plotly.newPlot("telemetry", [
+    {x: s.map(r => r.t), y: s.map(r => r.temp_c), name: "temp °C", mode: "lines"},
+    {x: s.map(r => r.t), y: s.map(r => r.proc_rss_mb), name: "process RSS MB", mode: "lines", yaxis: "y2"},
+  ], {margin: {t: 20}, xaxis: {title: "seconds"}, yaxis: {title: "°C"}, yaxis2: {title: "MB", overlaying: "y", side: "right"}});
+</script>
+{% endif %}
+
+{% if requests %}
+<h2>Requests ({{ requests | length }})</h2>
+<div class="wrap"><table>
+  <tr><th>id</th><th>ok</th><th>TTFT ms</th><th>e2e ms</th><th>prompt</th><th>gen</th><th>gen t/s</th><th>score</th><th>detail</th><th>response</th></tr>
+  {% for q in requests %}
+  <tr><td>{{ q.request_id }}</td><td class="{{ 'ok' if q.ok else 'ko' }}">{{ '✓' if q.ok else '✗' }}</td>
+    <td class="num">{{ q.ttft_ms | fmt }}</td><td class="num">{{ q.e2e_ms | fmt }}</td><td class="num">{{ q.prompt_n }}</td><td class="num">{{ q.predicted_n }}</td>
+    <td class="num">{{ q.gen_tps | fmt }}</td><td class="num">{{ q.score | fmt(2) }}</td><td class="wrapcell">{{ q.eval_detail or q.error or '' }}</td>
+    <td class="wrapcell">{{ (q.content or '')[:300] }}</td></tr>
+  {% endfor %}
+</table></div>
+{% endif %}
+
+{% if run.judge %}
+<h2>Judge scores (subjective)</h2>
+<div class="wrap"><table><tr><th>request</th><th>criterion</th><th>score</th><th>explanation</th></tr>
+{% for j in run.judge %}<tr><td>{{ j.request_id }}</td><td>{{ j.criterion }}</td><td class="num">{{ j.score | fmt(0) }}</td><td class="wrapcell">{{ j.explanation }}</td></tr>{% endfor %}
+</table></div>
+{% endif %}
+
+<h2>Configuration</h2>
+<pre>{{ run.argv | join(' ') }}</pre>
+<details><summary>config, environment, telemetry summary</summary>
+<pre>{{ {"config": run.config, "ignored": run.ignored, "env": run.env, "telemetry": run.telemetry, "cooldown": run.cooldown, "model": run.model, "build": run.build, "suite_provenance": run.suite_provenance} | tojson_pretty }}</pre>
+</details>
+{% endblock %}
