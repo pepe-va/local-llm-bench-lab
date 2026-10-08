@@ -1,0 +1,38 @@
+# Every phase in a few minutes on a PC, to try llb end to end before the Pi.
+# Two quantizations of a small model x two thread counts.
+version: 1
+extends: [_profiles/pc.yaml, _profiles/deterministic.yaml]
+
+experiment:
+  name: pc-smoke
+  description: Qwen3-0.6B Q4_K_M vs Q8_0 through bench, latency, quality and serving.
+  tags: [pc, smoke]
+
+models:
+  - { id: qwen3-0.6b-q4km, source: "hf://unsloth/Qwen3-0.6B-GGUF:Q4_K_M" }
+  - { id: qwen3-0.6b-q8, source: "hf://unsloth/Qwen3-0.6B-GGUF:Q8_0" }
+
+defaults:
+  load: { ctx_size: 4096, batch_size: 512, flash_attn: auto }
+  server: { reasoning: "off" }          # Qwen3 thinks by default; score the answer only
+
+matrix:
+  load.threads: [4, 8]
+
+phases:
+  bench: { n_prompt: [512], n_gen: [128], repetitions: 3 }
+  latency: { enabled: true, suites: [../suites/synthetic-512x128.yaml] }
+  quality: { enabled: true, suites: [../suites/es-writing.yaml] }
+  serving:
+    enabled: true
+    suites: [../suites/synthetic-chat-mix.yaml]
+    concurrency: [1, 4]
+    requests: 16
+
+gates:
+  - { metric: "tps:tg128", op: ">=", value: 20 }
+  - { metric: "ttft_ms_p95@synthetic-512x128", op: "<=", value: 2000, agg: max }
+  - { metric: requests_failed, op: "==", value: 0, agg: max }
+select: { metric: "gen_tps_mean@synthetic-512x128", objective: maximize }
+
+output: { report: [md, html, png] }

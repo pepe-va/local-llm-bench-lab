@@ -1,0 +1,13 @@
+# A desktop/laptop Linux (also WSL): no Pi-specific checks. llama.cpp pinned to a release tag;
+# override with LLB_LLAMA_REF=<tag>. Cooldown is skipped automatically if there is no
+# temperature sensor (WSL has none).
+llama_cpp:
+  builds:
+    - id: pc
+      ref: ${env:LLB_LLAMA_REF:-b11507}
+      backend: cpu
+
+hardware:
+  telemetry: { hz: 2, sources: [linux] }
+  cooldown: { enabled: true, max_temp_c: 85, stable_for_s: 5, poll_s: 5, timeout_s: 300 }
+  preflight: { fail_on_throttled: false }
