@@ -9,9 +9,10 @@ Reproducible benchmarking lab for local LLMs on [llama.cpp](https://github.com/g
 - **Hardware telemetry**: temperature, throttling, exact peak RAM, CPU frequency, and temperature-based cooldown.
 - **Reproducible results** in SQLite, with fingerprints for `--resume`, plus CSV and JSONL exports.
 - **Quality suites**: own prompts (a Spanish writing suite is included), files or Hugging Face datasets, scored by deterministic evaluators (exact, contains, regex, numeric extraction, length, JSON schema, composites).
+- **Gates and guidance**: pass/fail thresholds per configuration, the winner, and a ready-to-run `llama-server` command; reports in HTML (offline charts), Markdown and PNG.
 - Planned: HTML/Markdown/PNG reports, pass/fail gates, and embeddings/rerank/vision. See the [roadmap](docs/PLAN.md#roadmap-de-implementación).
 
-> Status: **v0.5.0** (Phase 4, quality). See [CHANGELOG](CHANGELOG.md).
+> Status: **v0.6.0** (Phase 5, reports and gates). See [CHANGELOG](CHANGELOG.md).
 
 ## Quick start
 
@@ -24,6 +25,8 @@ uv run llb validate experiments/pi5-threads.yaml
 uv run llb plan experiments/pi5-threads.yaml
 uv run llb run experiments/pi5-threads.yaml          # Ctrl-C safe; continue with --resume
 uv run llb run experiments/pi5-latency.yaml          # TTFT / ITL through llama-server
+uv run llb guide experiments/pi5-latency.yaml        # gates -> winner -> deploy command
+uv run llb report experiments/pi5-latency.yaml -f html -f png
 ```
 
 Results go to `~/.local/share/llmbench/runs/<experiment>/` (`benchmark.sqlite`, `summary.csv`, `latency.csv`, `runs.jsonl`, server logs) unless `output.directory` says otherwise.

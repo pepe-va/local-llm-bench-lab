@@ -5,6 +5,27 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-08
+
+Phase 5: reports and gates.
+
+### Added
+
+- Per-configuration analysis view (build x model x variant) across every phase. Bench results are shared with the variants they are identical for.
+- `gates:` (metric, op, value, agg) and `select:` in experiments. Metric names include `tps:<test>`, run metrics optionally restricted to one suite with `@<suite>`, `peak_rss_mb`, `temp_peak_c` and `throttled` (ADR-0016).
+- `llb guide`: applies the gates, picks the winner and writes `guidance.md` with a ready `llama-server` command (sampling as server flags, bound to 127.0.0.1) and a systemd unit. Exits 1 when nothing passes.
+- `llb report`: self-contained HTML (embedded Plotly charts, filterable and sortable tables, light/dark), Markdown and PNG (matplotlib), from an experiment, a results directory or a SQLite file.
+- `llb run` writes the reports listed in `output.report` (default `md`) and, when gates are defined, `guidance.md`, exiting 1 if no configuration passes.
+- Example gates in `pi5-latency.yaml`.
+
+### Fixed
+
+- Offline mode never triggered with huggingface_hub 2.x: network errors (`httpx2.ProxyError`, `ConnectError`...) are not `OSError`. They now fall back to the local cache instead of crashing. Dataset download failures are reported as suite errors.
+
+### Changed
+
+- CI installs every extra (`uv sync --locked --all-extras`). The `report` extra pins jinja2, plotly and matplotlib.
+
 ## [0.5.0] - 2026-10-08
 
 Phase 4: quality.
@@ -111,7 +132,8 @@ Phase 0: project skeleton.
 - ruff, basedpyright (strict), pytest, pre-commit, and GitHub Actions on x86_64 and arm64.
 - Project proposal (`docs/PRD.md`) and plan (`docs/PLAN.md`).
 
-[Unreleased]: https://github.com/OWNER/local-llm-bench-lab/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/OWNER/local-llm-bench-lab/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/OWNER/local-llm-bench-lab/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/OWNER/local-llm-bench-lab/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/OWNER/local-llm-bench-lab/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/OWNER/local-llm-bench-lab/compare/v0.2.0...v0.3.0
