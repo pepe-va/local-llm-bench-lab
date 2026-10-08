@@ -5,6 +5,25 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-08
+
+Phase 6: modalities.
+
+### Added
+
+- `embeddings` suites: items or columns `a`, `b`, `label`, plus a `pooling` option. Reports the cosine similarity per pair and Spearman/Pearson correlation with the labels per run.
+- `rerank` suites: `query`, `documents`, `relevant`, plus `k`. Reports nDCG@k, MRR, recall@k and top-1 accuracy.
+- Vision: chat items with an `image` (local files are inlined as data URLs, and their content hash enters the request digest), and `models[].mmproj` resolved like any model and passed as `-mm`.
+- The server mode (generate, embeddings:<pooling>, rerank) is part of the server key and adds `--embeddings`, `--pooling` or `--reranking`.
+- `models[].suites` restricts which suites a model runs.
+- Example suites `embed-sts-es`, `rerank-es` and `vision-basic` (with images), and the `modalities` experiment.
+- Retrieval metrics in reports (spearman, nDCG, MRR columns). Database migration 0004.
+- ADR-0017.
+
+### Fixed
+
+- An explicit `hf://repo/mmproj-*.gguf` path can now be resolved; quant-based selection still never picks a projector.
+
 ## [0.6.0] - 2026-10-08
 
 Phase 5: reports and gates.
@@ -132,7 +151,8 @@ Phase 0: project skeleton.
 - ruff, basedpyright (strict), pytest, pre-commit, and GitHub Actions on x86_64 and arm64.
 - Project proposal (`docs/PRD.md`) and plan (`docs/PLAN.md`).
 
-[Unreleased]: https://github.com/OWNER/local-llm-bench-lab/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/OWNER/local-llm-bench-lab/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/OWNER/local-llm-bench-lab/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/OWNER/local-llm-bench-lab/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/OWNER/local-llm-bench-lab/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/OWNER/local-llm-bench-lab/compare/v0.3.0...v0.4.0

@@ -10,9 +10,10 @@ Reproducible benchmarking lab for local LLMs on [llama.cpp](https://github.com/g
 - **Reproducible results** in SQLite, with fingerprints for `--resume`, plus CSV and JSONL exports.
 - **Quality suites**: own prompts (a Spanish writing suite is included), files or Hugging Face datasets, scored by deterministic evaluators (exact, contains, regex, numeric extraction, length, JSON schema, composites).
 - **Gates and guidance**: pass/fail thresholds per configuration, the winner, and a ready-to-run `llama-server` command; reports in HTML (offline charts), Markdown and PNG.
+- **Modalities**: embeddings (Spearman against labels), reranking (nDCG, MRR) and vision (models with an `mmproj`).
 - Planned: HTML/Markdown/PNG reports, pass/fail gates, and embeddings/rerank/vision. See the [roadmap](docs/PLAN.md#roadmap-de-implementación).
 
-> Status: **v0.6.0** (Phase 5, reports and gates). See [CHANGELOG](CHANGELOG.md).
+> Status: **v0.7.0** (Phase 6, embeddings, rerank and vision). See [CHANGELOG](CHANGELOG.md).
 
 ## Quick start
 
