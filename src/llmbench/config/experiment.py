@@ -111,10 +111,71 @@ class QualityPhase(SuitePhase):
     warmup_requests: Annotated[int, Field(ge=0)] = 0
 
 
+class ServingPhase(SuitePhase):
+    """Concurrent load (closed loop): `c` workers send requests back to back, per level.
+
+    One run per concurrency level. The server gets at least `max(concurrency)` slots
+    (`server.parallel` is raised if lower); context per slot is `ctx_size / parallel`.
+    """
+
+    concurrency: Annotated[list[Annotated[int, Field(gt=0)]], Field(min_length=1)] = [1, 2, 4]
+    requests: Annotated[int, Field(gt=0)] | None = None
+    """Requests per level (the suite is cycled); default: the suite size x passes."""
+
+
+class LmEvalPhase(Strict):
+    """lm-evaluation-harness against each configuration's llama-server (extra `lm-eval`).
+
+    Generation tasks (`gsm8k`, `ifeval`...) work with the chat endpoint; loglikelihood
+    tasks need `model: local-completions` and a server/model that returns logprobs.
+    """
+
+    enabled: bool = False
+    tasks: Annotated[list[str], Field(min_length=1)] = ["gsm8k"]
+    model: Literal["local-chat-completions", "local-completions"] = "local-chat-completions"
+    limit: Annotated[int, Field(gt=0)] | None = 50
+    num_fewshot: Annotated[int, Field(ge=0)] | None = None
+    apply_chat_template: bool = True
+    extra_args: list[str] = []
+    timeout_s: Annotated[float, Field(gt=0)] = 6 * 3600
+    startup_timeout_s: Annotated[float, Field(gt=0)] = 600
+
+
+class JudgeModel(Strict):
+    source: str
+    mmproj: str | None = None
+
+
+class JudgePhase(Strict):
+    """LLM-as-judge pass over responses whose evaluator has an `llm_judge` part.
+
+    Scores (1-5 per criterion) are stored apart from objective ones (PRD §18) and are
+    always labeled as subjective in reports.
+    """
+
+    enabled: bool = False
+    model: JudgeModel | None = None
+    build: str | None = None
+    """Build id to run the judge with (default: the first build)."""
+    config: dict[str, Any] = {}
+    """LlamaConfig overrides for the judge server (dotted keys allowed, like `matrix`)."""
+    max_tokens: Annotated[int, Field(gt=0)] = 384
+    startup_timeout_s: Annotated[float, Field(gt=0)] = 600
+
+    @model_validator(mode="after")
+    def _model(self) -> Self:
+        if self.enabled and self.model is None:
+            raise ValueError("judge phase is enabled but has no `model`")
+        return self
+
+
 class Phases(Strict):
     bench: BenchPhase = BenchPhase()
     latency: LatencyPhase = LatencyPhase()
     quality: QualityPhase = QualityPhase()
+    serving: ServingPhase = ServingPhase()
+    lm_eval: LmEvalPhase = LmEvalPhase()
+    judge: JudgePhase = JudgePhase()
 
 
 class Telemetry(Strict):

@@ -97,6 +97,7 @@
 
   {% if d.quality %}
   <h2>Quality</h2>
+  <p class="muted">Scores 0-1 come from deterministic evaluators. Judge scores (1-5) are subjective (LLM-as-judge) and kept apart.</p>
   {{ filtered('t-quality') }}
   <div class="wrap"><table id="t-quality">
     <tr><th>model</th><th>quant</th><th>variant</th><th>suite</th><th>score</th><th>pass rate</th><th>scored</th><th>judge</th><th>spearman</th><th>nDCG</th><th>MRR</th><th>gen t/s</th><th>words/s</th></tr>
@@ -105,6 +106,26 @@
       <td class="num">{{ r.score_mean | fmt(3) }}</td><td class="num">{{ r.pass_rate | pct }}</td><td class="num">{{ r.scored | fmt(0) }}</td>
       <td class="num">{{ r['judge.overall_mean'] | fmt(2) }}</td><td class="num">{{ r.spearman | fmt(3) }}</td><td class="num">{{ r.ndcg | fmt(3) }}</td><td class="num">{{ r.mrr | fmt(3) }}</td><td class="num">{{ r.gen_tps_mean | fmt }}</td><td class="num">{{ r.words_per_s_mean | fmt }}</td></tr>
     {% endfor %}
+  </table></div>
+  {% endif %}
+
+  {% if d.serving %}
+  <h2>Serving · concurrent load</h2>
+  <div class="wrap"><table>
+    <tr><th>model</th><th>variant</th><th>suite</th><th>c</th><th>req/s</th><th>gen t/s aggregate</th><th>TTFT p50</th><th>TTFT p95</th><th>e2e p95</th><th>errors</th></tr>
+    {% for r in d.serving %}
+    <tr><td>{{ r.model }}</td><td>{{ r.variant }}</td><td>{{ r.suite }}</td><td class="num">{{ r.c }}</td>
+      <td class="num">{{ r.requests_per_s | fmt(2) }}</td><td class="num">{{ r.gen_tps_aggregate | fmt }}</td><td class="num">{{ r.ttft_ms_p50 | fmt }}</td>
+      <td class="num">{{ r.ttft_ms_p95 | fmt }}</td><td class="num">{{ r.e2e_ms_p95 | fmt }}</td><td class="num">{{ r.error_rate | pct }}</td></tr>
+    {% endfor %}
+  </table></div>
+  {% endif %}
+
+  {% if d.lm_eval %}
+  <h2>lm-evaluation-harness</h2>
+  <div class="wrap"><table>
+    <tr><th>model</th><th>variant</th><th>task.metric</th><th>value</th></tr>
+    {% for r in d.lm_eval %}<tr><td>{{ r.model }}</td><td>{{ r.variant }}</td><td>{{ r.metric }}</td><td class="num">{{ r.value | fmt(4) }}</td></tr>{% endfor %}
   </table></div>
   {% endif %}
 

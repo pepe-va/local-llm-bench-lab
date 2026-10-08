@@ -25,7 +25,9 @@ class RichEvents:
     def run_start(self, index: int, total: int, spec: RunSpec) -> None:
         console.print(
             f"\n[bold][{index}/{total}][/] {spec.phase} · {spec.model.id} · {spec.build.id} · "
-            f"{variant_label(spec.variant)}" + (f" · {spec.suite.name}" if spec.suite else ""),
+            f"{variant_label(spec.variant)}"
+            + (f" · {spec.suite.name}" if spec.suite else "")
+            + (f" · c={spec.concurrency}" if spec.concurrency else ""),
             highlight=False,
         )
 
@@ -63,6 +65,16 @@ class RichEvents:
             if cats:
                 console.print(f"  [dim]{' · '.join(cats)}[/]", highlight=False)
         m = record.metrics
+        if record.phase == "serving":
+            console.print(
+                f"  c={record.concurrency}: {_f(m.get('requests_per_s'), 2)} req/s · "
+                f"{_f(m.get('gen_tps_aggregate'))} gen t/s aggregate · "
+                f"errors {_pct(m.get('error_rate'))}",
+                highlight=False,
+            )
+        if record.phase == "lm_eval":
+            for k, v in sorted(m.items()):
+                console.print(f"  {k.removeprefix('lm_eval:')}: {_f(v, 4)}", highlight=False)
         if m.get("spearman") is not None or m.get("cosine_mean") is not None:
             console.print(
                 f"  spearman {_f(m.get('spearman'), 3)} · pearson {_f(m.get('pearson'), 3)}"
@@ -77,7 +89,7 @@ class RichEvents:
                 f" · {_f(m.get('rerank_tps_mean'))} tokens/s",
                 highlight=False,
             )
-        if record.phase in ("latency", "quality") and m.get("ttft_ms_p50") is not None:
+        if record.phase in ("latency", "quality", "serving") and m.get("ttft_ms_p50") is not None:
             console.print(
                 f"  TTFT p50 {_f(m.get('ttft_ms_p50'))} ms · p95 {_f(m.get('ttft_ms_p95'))} ms"
                 f"   ITL p50 {_f(m.get('itl_ms_p50'))} ms · p95 {_f(m.get('itl_ms_p95'))} ms",

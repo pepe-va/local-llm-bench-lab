@@ -129,6 +129,11 @@ class Handler(BaseHTTPRequestHandler):
                 return
             content = " ".join(p["text"] for p in content if p.get("type") == "text")
         text = os.environ.get("FAKE_CHAT_ANSWER") or content
+        fmt = req.get("response_format") or {}
+        if fmt.get("type") == "json_schema":  # judge: answer with a schema-valid JSON
+            schema = fmt["json_schema"]["schema"]
+            answer = {k: 4 for k in schema["required"] if k != "explanation"}
+            text = json.dumps(answer | {"explanation": "solid answer"})
         words = text.split(" ")
         prompt_n = sum(
             1 + len(tokenize(m["content"] if isinstance(m["content"], str) else content))

@@ -45,6 +45,7 @@ def print_plan(p: Plan, name: str, out: str) -> None:
     phases: tuple[tuple[Phase, list[RunSpec]], ...] = (
         ("latency", p.latency_runs),
         ("quality", p.quality_runs),
+        ("serving", p.serving_runs),
     )
     for phase, runs in phases:
         if runs:
@@ -52,6 +53,8 @@ def print_plan(p: Plan, name: str, out: str) -> None:
             t.add_row(f"[bold]{phase}[/] runs", f"[bold]{len(runs)}[/]")
             t.add_row("  suites", ", ".join(s.name for s in p.suites.get(phase, [])))
             t.add_row("  timed requests", f"[bold]{n if n is not None else '? (dataset)'}[/]")
+    if p.lm_eval_runs:
+        t.add_row("[bold]lm_eval[/] runs", f"[bold]{len(p.lm_eval_runs)}[/]")
     if p.server_runs:
         t.add_row("llama-server starts", str(p.servers))
     t.add_row("Output", out)

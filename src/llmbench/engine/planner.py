@@ -21,7 +21,8 @@ from llmbench.results.models import Phase
 # Fields that do not change what is measured, so they stay out of the fingerprint.
 _NON_IDENTITY_BENCH_FIELDS = {"enabled", "timeout_s", "unstable_cv"}
 _NON_IDENTITY_SUITE_FIELDS = {"enabled", "suites", "request_timeout_s", "startup_timeout_s"}
-SERVER_PHASES: tuple[Phase, ...] = ("latency", "quality")
+SERVER_PHASES: tuple[Phase, ...] = ("latency", "quality", "serving")
+"""Phases that send suites to llama-server (`lm_eval` also uses the server, without suites)."""
 
 
 @dataclass(frozen=True)
@@ -33,6 +34,8 @@ class RunSpec:
     config: LlamaConfig
     suite: Suite | None = None
     suite_path: Path | None = None
+    concurrency: int | None = None
+    """Serving phase: number of concurrent clients of this run."""
 
     def server_key(self) -> str:
         """Runs with the same key can share one llama-server process."""
@@ -70,8 +73,16 @@ class Plan:
         return [r for r in self.runs if r.phase == "quality"]
 
     @property
+    def serving_runs(self) -> list[RunSpec]:
+        return [r for r in self.runs if r.phase == "serving"]
+
+    @property
+    def lm_eval_runs(self) -> list[RunSpec]:
+        return [r for r in self.runs if r.phase == "lm_eval"]
+
+    @property
     def server_runs(self) -> list[RunSpec]:
-        return [r for r in self.runs if r.phase in SERVER_PHASES]
+        return [r for r in self.runs if r.phase != "bench"]
 
     @property
     def total_tests(self) -> int:
@@ -85,9 +96,14 @@ class Plan:
     def servers(self) -> int:
         return len({r.server_key() for r in self.server_runs})
 
+    serving_requests: int | None = None
+
     def requests(self, phase: Phase) -> int | None:
         """Timed requests of a phase; None if a dataset's size is unknown before download."""
-        sizes = [suite_size(r.suite) for r in self.runs if r.phase == phase]
+        runs = [r for r in self.runs if r.phase == phase]
+        if phase == "serving" and self.serving_requests is not None:
+            return self.serving_requests * len(runs)
+        sizes = [suite_size(r.suite) for r in runs]
         if any(s is None for s in sizes):
             return None
         return sum(s or 0 for s in sizes) * self.passes.get(phase, 1)
@@ -116,13 +132,25 @@ def make_plan(exp: Experiment, *, model_ids: list[str] | None = None) -> Plan:
         loaded = [(p, load_suite(p)) for p in cfg_phase.suites]
         suites[phase] = [s for _, s in loaded]
         passes[phase] = cfg_phase.passes
+        levels: list[int | None] = (
+            list(exp.phases.serving.concurrency) if phase == "serving" else [None]
+        )
         served += [
-            RunSpec(phase, build, model, variant, cfg, suite, path)
+            RunSpec(phase, build, model, variant, _serving_config(cfg, levels), suite, path, c)
             for build in exp.llama_cpp.builds
             for model in models
             for variant, cfg in configs
             for path, suite in loaded
             if model.suites is None or suite.name in model.suites
+            for c in levels
+        ]
+    if exp.phases.lm_eval.enabled:
+        served += [
+            RunSpec("lm_eval", build, model, variant, cfg)
+            for build in exp.llama_cpp.builds
+            for model in models
+            for variant, cfg in configs
+            if model.suites is None  # models limited to some suites are not general LMs
         ]
     # stable sort: keeps phase and matrix order inside each server group
     order = {k: i for i, k in enumerate(dict.fromkeys(r.server_key() for r in served))}
@@ -137,7 +165,16 @@ def make_plan(exp: Experiment, *, model_ids: list[str] | None = None) -> Plan:
         repetitions=bench.repetitions,
         suites=suites,
         passes=passes,
+        serving_requests=exp.phases.serving.requests,
     )
+
+
+def _serving_config(cfg: LlamaConfig, levels: list[int | None]) -> LlamaConfig:
+    """Serving needs a slot per concurrent client: raise `server.parallel` if it is lower."""
+    top = max((c for c in levels if c is not None), default=None)
+    if top is None or (cfg.server.parallel is not None and cfg.server.parallel >= top):
+        return cfg
+    return cfg.model_copy(update={"server": cfg.server.model_copy(update={"parallel": top})})
 
 
 def _bench_runs(
@@ -157,6 +194,8 @@ def _bench_runs(
 
 
 def phase_config(exp: Experiment, phase: Phase) -> SuitePhase:
+    if phase == "serving":
+        return exp.phases.serving
     return exp.phases.latency if phase == "latency" else exp.phases.quality
 
 
@@ -197,6 +236,7 @@ def suite_fingerprint(
     suite: Suite,
     phase_config: SuitePhase,
     requests_digest: str | None = None,
+    concurrency: int | None = None,
 ) -> str:
     """Identity of a llama-server run.
 
@@ -214,6 +254,7 @@ def suite_fingerprint(
             "sampling": sampling,
             "suite": suite.model_dump(mode="json", by_alias=True),
             "requests": requests_digest,
+            "concurrency": concurrency,
             "phase_config": phase_config.model_dump(
                 mode="json", exclude=_NON_IDENTITY_SUITE_FIELDS
             ),

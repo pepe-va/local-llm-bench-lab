@@ -5,11 +5,16 @@ a server key (the planner orders runs that way, across both phases). Quality run
 score every response with its evaluator; latency metrics are recorded for both.
 """
 
+import json
+import threading
+import time
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
+from llmbench.config.evaluators import All, AnyOf, EvaluatorSpec, LlmJudge, Weighted
 from llmbench.config.suite import Suite
 from llmbench.data import synthetic
 from llmbench.data.hf_datasets import DatasetError
@@ -24,7 +29,12 @@ from llmbench.llamacpp.client import LlamaClient
 from llmbench.llamacpp.introspect import binary_flags, unknown_flags
 from llmbench.llamacpp.server import LlamaServer, ServerError
 from llmbench.results.models import RequestResult, RunRecord, RunStatus
-from llmbench.results.stats import latency_metrics, quality_metrics, retrieval_metrics
+from llmbench.results.stats import (
+    latency_metrics,
+    quality_metrics,
+    retrieval_metrics,
+    serving_metrics,
+)
 from llmbench.telemetry.cooldown import CooldownResult
 from llmbench.telemetry.sampler import Sampler, TelemetrySummary
 
@@ -154,6 +164,7 @@ def run_suite_spec(
         suite=spec.suite,
         phase_config=phase_config(ctx.exp, spec.phase),
         requests_digest=requests_digest(materialized.requests) if materialized else None,
+        concurrency=spec.concurrency,
     )
     if ctx.resume and ctx.store.is_completed(fp):
         ctx.events.run_skipped(index, total, spec, "already completed")
@@ -215,6 +226,7 @@ def run_suite_spec(
         telemetry=out.telemetry.to_dict() if out.telemetry else None,
         cooldown=asdict(out.cooldown) if out.cooldown else None,
         suite=spec.suite.name,
+        concurrency=spec.concurrency,
         suite_provenance=materialized.provenance if materialized else {"source": "synthetic"},
         metrics=out.metrics,
         requests=out.results,
@@ -264,14 +276,25 @@ def _measure(
         for req in requests[: phase.warmup_requests]:
             send(req)  # not recorded
         before = server.metrics()
-        for p in range(phase.passes):
-            for req in requests:
-                r = send(req)
-                if spec.phase == "quality" and endpoint in ("completion", "chat"):
-                    r = _scored(r, req)
-                out.results.append(replace(r, id=f"{r.id}#{p}"))
+        wall = 0.0
+        if spec.phase == "serving":
+            assert spec.concurrency is not None
+            wall = _serve(
+                server.url,
+                requests,
+                total=ctx.exp.phases.serving.requests or len(requests) * phase.passes,
+                concurrency=spec.concurrency,
+                sampling=sampling,
+                endpoint=endpoint,
+                out=out,
+            )
+        else:
+            score = spec.phase == "quality" and endpoint in ("completion", "chat")
+            out.results += _sequential(requests, phase.passes, send, score=score)
         after = server.metrics()
         out.metrics = latency_metrics(out.results) | _server_metrics(server, before, after, fresh)
+        if spec.phase == "serving":
+            out.metrics |= serving_metrics(out.results, wall, spec.concurrency or 1)
         if endpoint in ("embeddings", "rerank"):
             out.metrics |= retrieval_metrics(out.results, endpoint, suite.k)
         elif spec.phase == "quality":
@@ -290,17 +313,98 @@ def _measure(
         out.telemetry = sampler.stop() if sampler.started else None
 
 
+def _sequential(
+    requests: list[Request],
+    passes: int,
+    send: Callable[[Request], RequestResult],
+    *,
+    score: bool,
+) -> list[RequestResult]:
+    results: list[RequestResult] = []
+    for p in range(passes):
+        for req in requests:
+            r = send(req)
+            if score:
+                r = _scored(r, req)
+            results.append(replace(r, id=f"{r.id}#{p}"))
+    return results
+
+
+def _serve(
+    url: str,
+    requests: list[Request],
+    *,
+    total: int,
+    concurrency: int,
+    sampling: dict[str, Any],
+    endpoint: str,
+    out: _Outcome,
+) -> float:
+    """Closed loop: `concurrency` clients send `total` requests (suite cycled) back to back."""
+    lock = threading.Lock()
+    counter = iter(range(total))
+    results: list[RequestResult] = []
+
+    def worker() -> None:
+        client = LlamaClient(url)
+        try:
+            while True:
+                with lock:
+                    i = next(counter, None)
+                if i is None:
+                    return
+                req = requests[i % len(requests)]
+                r = client.complete(req, sampling, endpoint=endpoint)
+                with lock:
+                    results.append(replace(r, id=f"{r.id}#{i // len(requests)}"))
+        finally:
+            client.close()
+
+    t0 = time.perf_counter()
+    with ThreadPoolExecutor(max_workers=concurrency, thread_name_prefix="llb-client") as pool:
+        for f in [pool.submit(worker) for _ in range(concurrency)]:
+            f.result()
+    wall = time.perf_counter() - t0
+    out.results.extend(results)
+    return wall
+
+
 def _scored(r: RequestResult, req: Request) -> RequestResult:
     if not r.ok or req.evaluator is None:
         return r
     s = evaluate(req.evaluator, r.content, req)
+    judges = _judge_parts(req.evaluator)
+    spec = (
+        json.dumps(
+            {
+                "criteria": sorted({c for j in judges for c in j.criteria}),
+                "rubric": "\n".join(j.rubric for j in judges if j.rubric) or None,
+            }
+        )
+        if judges
+        else None
+    )
     return replace(
         r,
+        reference=req.reference,
+        judge_spec=spec,
         score=s.value if s.has_objective else None,
         passed=s.passed if s.has_objective else None,
         eval_detail=s.detail or None,
         judge_pending=s.pending_judge,
     )
+
+
+def _judge_parts(spec: EvaluatorSpec) -> list[LlmJudge]:
+    match spec:
+        case LlmJudge():
+            return [spec]
+        case All() | AnyOf():
+            return [j for p in spec.of for j in _judge_parts(p)]
+        case Weighted():
+            return [j for p in spec.of for j in _judge_parts(p.evaluator)]
+        case _:
+            return []
 
 
 def _server_metrics(

@@ -64,8 +64,8 @@ class Store:
                 """INSERT INTO runs (fingerprint, experiment, phase, status, error,
                     build_id, build_commit, backend, model_id, model_sha256,
                     build, model, variant, config, argv, ignored, env, telemetry, cooldown,
-                    started_at, finished_at, duration_s, suite, suite_provenance)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    started_at, finished_at, duration_s, suite, suite_provenance, concurrency)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     run.fingerprint,
                     run.experiment,
@@ -91,6 +91,7 @@ class Store:
                     run.duration_s,
                     run.suite,
                     j(run.suite_provenance) if run.suite_provenance is not None else None,
+                    run.concurrency,
                 ),
             )
             run_id = cur.lastrowid
@@ -125,8 +126,8 @@ class Store:
                 """INSERT INTO requests (run_id, idx, request_id, pass, ok, error, ttft_ms,
                     e2e_ms, prompt_n, prompt_ms, predicted_n, predicted_ms, prompt_tps, gen_tps,
                     cache_n, stop_type, itl_ms, content, reasoning, prompt_text, category, score,
-                    passed, eval_detail, judge_pending, label, similarity)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    passed, eval_detail, judge_pending, label, similarity, reference, judge_spec)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 [
                     (
                         run_id,
@@ -156,6 +157,8 @@ class Store:
                         int(r.judge_pending),
                         r.label,
                         r.similarity,
+                        r.reference,
+                        r.judge_spec,
                     )
                     for i, r in enumerate(run.requests)
                 ],
@@ -258,6 +261,81 @@ class Store:
                 "SELECT * FROM requests WHERE run_id = ? ORDER BY idx", (run_id,)
             )
         ]
+
+    # -- LLM judge ----------------------------------------------------------
+
+    def pending_judgements(self, experiment: str) -> list[dict[str, Any]]:
+        """Responses of the latest runs that still await the judge."""
+        return [
+            dict(r)
+            for r in self.db.execute(
+                """SELECT q.run_id, q.idx, q.request_id, q.prompt_text, q.content, q.reference,
+                          q.judge_spec
+                   FROM requests q JOIN runs r ON r.id = q.run_id
+                   WHERE r.experiment = ? AND q.judge_pending = 1 AND q.ok = 1
+                     AND r.id = (SELECT MAX(id) FROM runs WHERE fingerprint = r.fingerprint)
+                   ORDER BY q.run_id, q.idx""",
+                (experiment,),
+            )
+        ]
+
+    def reset_judgements(self, experiment: str) -> int:
+        """Forget judge scores so every judgeable response is judged again."""
+        with self.db:
+            self.db.execute(
+                "DELETE FROM judge_scores WHERE run_id IN "
+                "(SELECT id FROM runs WHERE experiment = ?)",
+                (experiment,),
+            )
+            cur = self.db.execute(
+                """UPDATE requests SET judge_pending = 1 WHERE judge_spec IS NOT NULL
+                   AND run_id IN (SELECT id FROM runs WHERE experiment = ?)""",
+                (experiment,),
+            )
+        return cur.rowcount
+
+    def save_judgement(
+        self,
+        *,
+        run_id: int,
+        idx: int,
+        request_id: str,
+        scores: dict[str, tuple[float | None, str]],
+        judge: dict[str, Any],
+        judged_at: str,
+    ) -> None:
+        with self.db:
+            self.db.executemany(
+                "INSERT OR REPLACE INTO judge_scores VALUES (?,?,?,?,?,?,?,?)",
+                [
+                    (run_id, idx, request_id, c, s, expl, json.dumps(judge), judged_at)
+                    for c, (s, expl) in scores.items()
+                ],
+            )
+            self.db.execute(
+                "UPDATE requests SET judge_pending = 0 WHERE run_id = ? AND idx = ?", (run_id, idx)
+            )
+
+    def refresh_judge_metrics(self, run_id: int) -> dict[str, float]:
+        """Recompute `judge.<criterion>_mean` and `judge.overall_mean` (1-5) of a run."""
+        rows = self.db.execute(
+            "SELECT criterion, AVG(score) FROM judge_scores WHERE run_id = ? AND score IS NOT NULL "
+            "GROUP BY criterion",
+            (run_id,),
+        ).fetchall()
+        metrics = {f"judge.{c}_mean": float(v) for c, v in rows}
+        if metrics:
+            metrics["judge.overall_mean"] = sum(metrics.values()) / len(metrics)
+        pending = self.db.execute(
+            "SELECT COUNT(*) FROM requests WHERE run_id = ? AND judge_pending = 1", (run_id,)
+        ).fetchone()[0]
+        metrics["judge_pending"] = float(pending)
+        with self.db:
+            self.db.executemany(
+                "INSERT OR REPLACE INTO run_metrics (run_id, name, value) VALUES (?,?,?)",
+                [(run_id, k, v) for k, v in metrics.items()],
+            )
+        return metrics
 
     # -- model hashes ------------------------------------------------------
 

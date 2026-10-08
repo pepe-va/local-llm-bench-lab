@@ -27,7 +27,7 @@ def load_experiment(path: Path) -> Experiment:
         exp = Experiment.model_validate(_interpolate(raw))
     except ValidationError as e:
         raise ConfigError(_format_errors(e, path, root_doc)) from None
-    for phase in (exp.phases.latency, exp.phases.quality):
+    for phase in (exp.phases.latency, exp.phases.quality, exp.phases.serving):
         for suite in phase.suites if phase.enabled else []:
             load_suite(suite)  # fail early on a broken suite
     return exp
@@ -71,7 +71,7 @@ def _load_tree(path: Path, stack: tuple[Path, ...]) -> tuple[dict[str, Any], Com
 
 def _anchor_paths(data: dict[str, Any], base: Path) -> None:
     """Make file references relative to the YAML that declares them (also through `extends`)."""
-    for phase in ("latency", "quality"):
+    for phase in ("latency", "quality", "serving"):
         node = _node(data, "phases", phase)
         suites = node.get("suites") if node is not None else None
         if node is not None and isinstance(suites, list):

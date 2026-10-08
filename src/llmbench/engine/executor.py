@@ -10,7 +10,9 @@ from typing import Any
 
 from llmbench.config.experiment import Experiment, ModelSpec
 from llmbench.engine import env as envmod
+from llmbench.engine.judge import run_judge
 from llmbench.engine.phases.bench import run_bench_spec
+from llmbench.engine.phases.lm_eval import run_lm_eval_spec
 from llmbench.engine.phases.suites import ServerPool, run_suite_spec
 from llmbench.engine.planner import Plan, RunSpec
 from llmbench.engine.runtime import Events, ModelHandle, RunContext, output_dir
@@ -140,12 +142,21 @@ def execute(
             else:
                 summary.interrupted = True
                 break
+        if exp.phases.judge.enabled and not summary.interrupted:
+            pool.release()
+            j = run_judge(exp, store, events, model_store=model_store)
+            if j.error:
+                summary.warnings.append(f"judge: {j.error}")
+                events.log(f"[warning] judge: {j.error}")
+            elif j.judged or j.failed:
+                events.log(f"judge: {j.judged} judged, {j.failed} unparseable, {j.runs} run(s)")
     finally:
         pool.release()
         if "csv" in exp.output.formats:
             export.write_csv(out / "summary.csv", store, exp.experiment.name)
             export.write_latency_csv(out / "latency.csv", store, exp.experiment.name)
             export.write_quality_csv(out / "quality.csv", store, exp.experiment.name)
+            export.write_serving_csv(out / "serving.csv", store, exp.experiment.name)
         store.close()
     return summary
 
@@ -167,6 +178,8 @@ def _dispatch(
         return "failed"
     if spec.phase == "bench":
         return run_bench_spec(ctx, spec, rb=rb, model=model, index=index, total=total)
+    if spec.phase == "lm_eval":
+        return run_lm_eval_spec(ctx, spec, rb=rb, model=model, pool=pool, index=index, total=total)
     draft = mmproj = None
     if spec.config.speculative.draft_model is not None:
         draft = models.aux("draft", spec.config.speculative.draft_model)

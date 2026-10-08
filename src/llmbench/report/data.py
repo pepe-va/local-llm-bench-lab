@@ -23,6 +23,8 @@ class ReportData:
     bench: list[dict[str, Any]] = field(default_factory=list[dict[str, Any]])
     latency: list[dict[str, Any]] = field(default_factory=list[dict[str, Any]])
     quality: list[dict[str, Any]] = field(default_factory=list[dict[str, Any]])
+    serving: list[dict[str, Any]] = field(default_factory=list[dict[str, Any]])
+    lm_eval: list[dict[str, Any]] = field(default_factory=list[dict[str, Any]])
     failures: list[dict[str, Any]] = field(default_factory=list[dict[str, Any]])
     gates: list[Gate] = field(default_factory=list[Gate])
     verdicts: list[Verdict] = field(default_factory=list[Verdict])
@@ -103,6 +105,11 @@ def _add_run(data: ReportData, row: ConfigRow, run: dict[str, Any]) -> None:
             )
     elif run["phase"] == "latency":
         data.latency.append(base | {"suite": run["suite"]} | metrics)
+    elif run["phase"] == "serving":
+        data.serving.append(base | {"suite": run["suite"], "c": run.get("concurrency")} | metrics)
+    elif run["phase"] == "lm_eval":
+        for name, value in metrics.items():
+            data.lm_eval.append(base | {"metric": name.removeprefix("lm_eval:"), "value": value})
     elif run["phase"] == "quality":
         # rerank cut-offs vary per suite (ndcg@3, ndcg@10...): expose them under stable keys
         extra = {

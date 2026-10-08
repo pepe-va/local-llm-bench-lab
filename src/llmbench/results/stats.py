@@ -111,3 +111,20 @@ def retrieval_metrics(
 def _mean(xs: list[float | None]) -> float | None:
     vals = [x for x in xs if x is not None]
     return statistics.fmean(vals) if vals else None
+
+
+def serving_metrics(
+    results: list[RequestResult], wall_s: float, concurrency: int
+) -> dict[str, float | None]:
+    """Throughput under concurrent load (PRD §12, phase D)."""
+    ok = [r for r in results if r.ok]
+    gen = sum(r.predicted_n or 0 for r in ok)
+    prompt = sum(r.prompt_n or 0 for r in ok)
+    return {
+        "concurrency": float(concurrency),
+        "wall_s": wall_s,
+        "requests_per_s": len(ok) / wall_s if wall_s else None,
+        "gen_tps_aggregate": gen / wall_s if wall_s else None,
+        "prompt_tps_aggregate": prompt / wall_s if wall_s else None,
+        "error_rate": (len(results) - len(ok)) / len(results) if results else None,
+    }

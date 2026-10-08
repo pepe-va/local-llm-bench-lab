@@ -55,6 +55,21 @@ def charts(d: ReportData) -> list[tuple[str, Any]]:
             )  # fmt: skip
         fig.update_layout(barmode="group", yaxis_title="ms (bar p50, whisker p95)")
         figs.append(("Time to first token", fig))
+    if d.serving:
+        fig = go.Figure()
+        for cfg in dict.fromkeys(r["config"] + " · " + str(r["suite"]) for r in d.serving):
+            rows = sorted(
+                (r for r in d.serving if r["config"] + " · " + str(r["suite"]) == cfg),
+                key=lambda r: r.get("c") or 0,
+            )
+            fig.add_scatter(
+                name=cfg,
+                mode="lines+markers",
+                x=[r.get("c") for r in rows],
+                y=[r.get("gen_tps_aggregate") for r in rows],
+            )
+        fig.update_layout(xaxis_title="concurrent clients", yaxis_title="aggregate gen tokens/s")
+        figs.append(("Throughput vs concurrency", fig))
     scored = [r for r in d.quality if r.get("score_mean") is not None]
     if scored:
         fig = go.Figure()

@@ -1,0 +1,27 @@
+# Phase D (PRD §12): 1, 2, 4, 8 concurrent users on the Pi. Mostly educational on 4 cores:
+# watch aggregate throughput flatten while TTFT p95 grows.
+version: 1
+extends: [_profiles/pi5.yaml, _profiles/deterministic.yaml]
+
+experiment:
+  name: pi5-serving
+  tags: [pi5, serving]
+
+models:
+  - { id: qwen3-1.7b-q4km, source: "hf://unsloth/Qwen3-1.7B-GGUF:Q4_K_M" }
+
+defaults:
+  load: { threads: 4, ctx_size: 8192 }     # split across slots: 1024 tokens per slot at c=8
+  server: { cont_batching: true }
+
+phases:
+  bench: { enabled: false }
+  serving:
+    enabled: true
+    suites: [../suites/synthetic-chat-mix.yaml]
+    concurrency: [1, 2, 4, 8]
+    requests: 32
+
+gates:
+  - { metric: "ttft_ms_p95", op: "<=", value: 8000, agg: max }
+  - { metric: error_rate, op: "==", value: 0, agg: max }

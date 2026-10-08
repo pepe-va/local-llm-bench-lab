@@ -99,6 +99,28 @@ QUALITY_METRICS = [
 ]
 
 
+SERVING_METRICS = [
+    "concurrency",
+    "requests",
+    "requests_failed",
+    "requests_per_s",
+    "gen_tps_aggregate",
+    "prompt_tps_aggregate",
+    "ttft_ms_p50",
+    "ttft_ms_p95",
+    "e2e_ms_p50",
+    "e2e_ms_p95",
+    "itl_ms_p50",
+    "itl_ms_p95",
+    "error_rate",
+    "server_peak_rss_mb",
+]
+
+
+def write_serving_csv(path: Path, store: Store, experiment: str) -> int:
+    return _write_server_csv(path, store, experiment, "serving", SERVING_METRICS)
+
+
 def write_latency_csv(path: Path, store: Store, experiment: str) -> int:
     return _write_server_csv(path, store, experiment, "latency", LATENCY_METRICS)
 

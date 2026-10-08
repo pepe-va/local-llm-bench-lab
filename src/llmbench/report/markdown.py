@@ -59,6 +59,27 @@ def quality_table(d: ReportData) -> str:
     )  # fmt: skip
 
 
+def serving_table(d: ReportData) -> str:
+    return _table(
+        ["model", "variant", "suite", "c", "req/s", "gen t/s (aggregate)", "TTFT p50", "TTFT p95",
+         "e2e p95", "errors"],
+        [
+            [r["model"], r["variant"], r["suite"], _fmt(r.get("c")),
+             _fmt(r.get("requests_per_s"), 2), _fmt(r.get("gen_tps_aggregate")),
+             _fmt(r.get("ttft_ms_p50")), _fmt(r.get("ttft_ms_p95")), _fmt(r.get("e2e_ms_p95")),
+             _pct(r.get("error_rate"))]
+            for r in d.serving
+        ],
+    )  # fmt: skip
+
+
+def lm_eval_table(d: ReportData) -> str:
+    return _table(
+        ["model", "variant", "task.metric", "value"],
+        [[r["model"], r["variant"], r["metric"], _fmt(r["value"], 4)] for r in d.lm_eval],
+    )
+
+
 def gates_table(d: ReportData) -> str:
     rows: list[list[str]] = []
     for v in d.verdicts:
@@ -89,7 +110,16 @@ def render_markdown(d: ReportData) -> str:
     if d.latency:
         parts += ["## Latency (llama-server)", latency_table(d)]
     if d.quality:
-        parts += ["## Quality", quality_table(d)]
+        parts += [
+            "## Quality",
+            "_Judge scores (1-5) are subjective (LLM-as-judge) and kept apart from objective "
+            "scores (0-1)._",
+            quality_table(d),
+        ]
+    if d.serving:
+        parts += ["## Serving (concurrent load)", serving_table(d)]
+    if d.lm_eval:
+        parts += ["## lm-evaluation-harness", lm_eval_table(d)]
     if d.failures:
         parts += [
             "## Failed runs",

@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-type Phase = Literal["bench", "latency", "quality"]
+type Phase = Literal["bench", "latency", "quality", "serving", "lm_eval"]
 type RunStatus = Literal["completed", "failed", "interrupted"]
 type TestKind = Literal["pp", "tg", "pg"]
 
@@ -66,6 +66,9 @@ class RequestResult:
     """Embeddings: the human similarity label of the pair."""
     similarity: float | None = None
     """Embeddings: cosine similarity of the pair."""
+    reference: str | None = field(default=None, repr=False)
+    judge_spec: str | None = field(default=None, repr=False)
+    """JSON {criteria, rubric} of the `llm_judge` parts awaiting the judge pass."""
 
 
 @dataclass(frozen=True)
@@ -91,6 +94,7 @@ class RunRecord:
     cooldown: dict[str, Any] | None = None
     measurements: list[Measurement] = field(default_factory=list[Measurement])
     suite: str | None = None
+    concurrency: int | None = None
     suite_provenance: dict[str, Any] | None = None
     metrics: dict[str, float | None] = field(default_factory=dict[str, float | None])
     """Aggregates of a latency run (ttft_ms_p50, gen_tps_mean, ...)."""

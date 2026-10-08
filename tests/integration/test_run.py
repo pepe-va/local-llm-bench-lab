@@ -2,6 +2,7 @@
 
 import csv
 import json
+import os
 import sqlite3
 from pathlib import Path
 
@@ -396,3 +397,56 @@ output: {{directory: {tmp_path / "out"}, report: [md]}}
     assert any(f"-mm {projector}" in line for line in lines)
     report = (tmp_path / "out" / "report.md").read_text()
     assert "| spearman | nDCG | MRR |" in report
+
+
+def test_serving_lm_eval_and_judge(
+    tmp_path: Path, fake_bin_dir: Path, tiny_model: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    lm_eval_dir = tmp_path / "lmbin"
+    lm_eval_dir.mkdir()
+    fake = lm_eval_dir / "lm_eval"
+    fake.write_text((Path(__file__).parents[1] / "fixtures" / "bin" / "fake-lm_eval").read_text())
+    fake.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{lm_eval_dir}:{os.environ['PATH']}")
+    (tmp_path / "q.yaml").write_text(
+        "name: q\nendpoint: chat\nsource:\n  items:\n"
+        "    - {prompt: Escribe algo, evaluator: {type: llm_judge, criteria: [grammar, clarity]}}\n"
+    )
+    exp = latency_experiment(tmp_path, fake_bin_dir, tiny_model)
+    exp.write_text(
+        exp.read_text()
+        .replace("load.threads: [1, 2]", "load.threads: [2]")
+        .replace("sampling.temperature: [0, 0.7]", "sampling.temperature: [0]")
+        .replace(
+            "  latency: {enabled: true, suites: [suites/syn.yaml], passes: 2, warmup_requests: 1}",
+            "  quality: {enabled: true, suites: [q.yaml]}\n"
+            "  serving: {enabled: true, suites: [suites/syn.yaml], concurrency: [1, 3],"
+            " requests: 9}\n"
+            "  lm_eval: {enabled: true, tasks: [gsm8k]}\n"
+            f"  judge: {{enabled: true, model: {{source: {tiny_model}}}}}",
+        )
+    )
+    r = runner.invoke(app, ["run", "-y", str(exp)])
+    assert r.exit_code == 0, out(r)
+    assert "c=3:" in out(r)
+    assert "gsm8k.exact_match.strict-match: 0.2500" in out(r)
+    assert "judge: 1 judged, 0 unparseable, 1 run(s)" in out(r)
+    db = sqlite3.connect(tmp_path / "out" / "benchmark.sqlite")
+    assert (
+        db.execute(
+            "SELECT COUNT(*) FROM requests WHERE run_id IN "
+            "(SELECT id FROM runs WHERE phase='serving')"
+        ).fetchone()[0]
+        == 18
+    )
+    assert db.execute("SELECT MAX(concurrency) FROM runs").fetchone()[0] == 3
+    assert (
+        db.execute("SELECT value FROM run_metrics WHERE name = 'judge.overall_mean'").fetchone()[0]
+        == 4
+    )
+    serving = list(csv.DictReader((tmp_path / "out" / "serving.csv").open()))
+    assert [row["concurrency"] for row in serving] == ["1.0", "3.0"]
+
+    r = runner.invoke(app, ["judge", str(exp), "--force"])
+    assert r.exit_code == 0, out(r)
+    assert "judged 1 response(s)" in out(r)

@@ -19,3 +19,11 @@ phases:
   quality:
     enabled: true
     suites: [../suites/es-writing.yaml, ../suites/hf-gsm8k.yaml]
+  # Subjective scores (grammar, clarity, faithfulness...) for the `llm_judge` parts of
+  # es-writing, stored apart from the objective ones. Use a stronger model than the judged ones.
+  judge:
+    enabled: true
+    model: { source: "hf://unsloth/Qwen3-4B-Instruct-2507-GGUF:Q4_K_M" }
+    config: { load.ctx_size: 8192, server.reasoning: "off" }
+  # Standard benchmark through lm-evaluation-harness (extra `lm-eval`), generation tasks only.
+  lm_eval: { enabled: false, tasks: [gsm8k], limit: 50 }
