@@ -263,3 +263,49 @@ def test_validate_checks_server_flags(tmp_path: Path, fake_bin_dir: Path, tiny_m
     assert r.exit_code == 1
     assert "llama-server lacks: --draft-max" in out(r)
     assert "suite syn" in out(r)
+
+
+def test_quality_run_scores_chat_answers(
+    tmp_path: Path, fake_bin_dir: Path, tiny_model: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    starts = tmp_path / "starts.txt"
+    monkeypatch.setenv("FAKE_SERVER_STARTS", str(starts))
+    monkeypatch.setenv("FAKE_CHAT_ANSWER", "La capital es Madrid.")
+    (tmp_path / "q.yaml").write_text(
+        """
+name: q
+endpoint: chat
+system: Responde breve.
+source:
+  items:
+    - {id: ok, category: geo, prompt: "¿España?", evaluator: {type: contains, values: [Madrid]}}
+    - {id: ko, category: geo, prompt: "¿Francia?", evaluator: {type: contains, values: [París]}}
+    - {id: judged, category: estilo, prompt: "Escribe algo", evaluator: {type: llm_judge}}
+"""
+    )
+    exp = latency_experiment(tmp_path, fake_bin_dir, tiny_model)
+    exp.write_text(
+        exp.read_text()
+        .replace("sampling.temperature: [0, 0.7]", "sampling.temperature: [0]")
+        .replace(
+            "passes: 2, warmup_requests: 1}",
+            "passes: 1, warmup_requests: 1}\n  quality: {enabled: true, suites: [q.yaml]}",
+        )
+    )
+    r = runner.invoke(app, ["run", "-y", str(exp)])
+    assert r.exit_code == 0, out(r)
+    assert "score 0.500 · pass 50% · 2 scored · 1 awaiting judge" in out(r)
+    # latency and quality runs of the same config share one server
+    assert len(starts.read_text().splitlines()) == 2
+
+    db = sqlite3.connect(tmp_path / "out" / "benchmark.sqlite")
+    rows = db.execute(
+        "SELECT request_id, score, passed, judge_pending, eval_detail FROM requests "
+        "WHERE run_id = (SELECT MIN(id) FROM runs WHERE phase = 'quality') ORDER BY request_id"
+    ).fetchall()
+    assert rows[0][:4] == ("q/judged#0", None, None, 1)
+    assert rows[1][:3] == ("q/ko#0", 0.0, 0)
+    assert "París" in rows[1][4]
+    assert rows[2][:3] == ("q/ok#0", 1.0, 1)
+    quality = list(csv.DictReader((tmp_path / "out" / "quality.csv").open()))
+    assert quality[0]["score_mean:geo"] == "0.5"

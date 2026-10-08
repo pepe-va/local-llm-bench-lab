@@ -65,6 +65,9 @@ class Handler(BaseHTTPRequestHandler):
             bos = [1] if req.get("add_special") else []
             self._json({"tokens": bos + tokenize(req["content"])})
             return
+        if self.path == "/v1/chat/completions":
+            self._chat(req)
+            return
         if self.path != "/completion":
             self._json({"error": "not found"}, 404)
             return
@@ -90,6 +93,31 @@ class Handler(BaseHTTPRequestHandler):
         final = {"content": "", "stop": True, "stop_type": "limit", "tokens_predicted": n,
                  "tokens_evaluated": prompt_n, "timings": timings}
         self.wfile.write(f"data: {json.dumps(final)}\n\n".encode())
+
+
+    def _chat(self, req: dict) -> None:
+        """OpenAI-style SSE; the answer is $FAKE_CHAT_ANSWER (default: echo of the last message)."""
+        text = os.environ.get("FAKE_CHAT_ANSWER") or req["messages"][-1]["content"]
+        words = text.split(" ")
+        prompt_n = sum(1 + len(tokenize(m["content"])) for m in req["messages"])
+        STATS["prompt_tokens_total"] += prompt_n
+        STATS["tokens_predicted_total"] += len(words)
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.end_headers()
+        for i, w in enumerate(words):
+            delta = {"content": w if i == 0 else " " + w}
+            chunk = {"choices": [{"index": 0, "delta": delta, "finish_reason": None}]}
+            self.wfile.write(f"data: {json.dumps(chunk)}\n\n".encode())
+            time.sleep(0.0005)
+        end = {"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]}
+        timings = {"cache_n": 0, "prompt_n": prompt_n, "prompt_ms": 1.0,
+                   "prompt_per_second": prompt_n / 0.001, "predicted_n": len(words),
+                   "predicted_ms": 1.0, "predicted_per_second": len(words) / 0.001}
+        usage = {"choices": [], "usage": {"prompt_tokens": prompt_n}, "timings": timings}
+        for event in (end, usage):
+            self.wfile.write(f"data: {json.dumps(event)}\n\n".encode())
+        self.wfile.write(b"data: [DONE]\n\n")
 
 
 def main() -> int:

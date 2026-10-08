@@ -14,8 +14,8 @@ from llmbench.config.experiment import Experiment, LatencyPhase
 from llmbench.config.llama import LlamaConfig
 from llmbench.config.suite import Suite, Synthetic
 from llmbench.data import synthetic
-from llmbench.engine.phases.latency import effective_sampling
-from llmbench.engine.planner import latency_fingerprint, make_plan
+from llmbench.engine.phases.suites import effective_sampling
+from llmbench.engine.planner import make_plan, suite_fingerprint
 from llmbench.llamacpp.argv import server_argv
 from llmbench.llamacpp.introspect import parse_help, unknown_flags
 from llmbench.llamacpp.server import parse_prometheus
@@ -211,7 +211,7 @@ def test_bench_dedupes_sampling_only_variants(tmp_path: Path) -> None:
     assert len(p.bench_runs) == 2 * 2  # models x threads (temperature does not matter)
     assert len(p.latency_runs) == 2 * 4
     assert p.servers == 2 * 2  # temperature variants share a server
-    assert p.total_requests == 8 * 3 * 2
+    assert p.requests("latency") == 8 * 3 * 2
 
 
 def test_latency_runs_are_grouped_by_server(tmp_path: Path) -> None:
@@ -228,14 +228,17 @@ def test_latency_fingerprint(tmp_path: Path) -> None:
         args: dict[str, object] = {
             "build": {"commit": "c"}, "model_sha256": "m", "draft_sha256": None,
             "config": run.config, "sampling": {"temperature": 0}, "suite": run.suite,
-            "latency": LatencyPhase(enabled=True, suites=[Path("x")]),
+            "phase": "latency", "phase_config": LatencyPhase(enabled=True, suites=[Path("x")]),
         } | kw  # fmt: skip
-        return latency_fingerprint(**args)  # type: ignore[arg-type]
+        return suite_fingerprint(**args)  # type: ignore[arg-type]
 
-    assert fp() == fp(latency=LatencyPhase(enabled=True, suites=[Path("y")], request_timeout_s=5))
+    lp = LatencyPhase(enabled=True, suites=[Path("y")], request_timeout_s=5)
+    assert fp() == fp(phase_config=lp)
     assert fp() != fp(sampling={"temperature": 0.8})
     assert fp() != fp(draft_sha256="d")
-    assert fp() != fp(latency=LatencyPhase(enabled=True, suites=[Path("x")], passes=3))
+    assert fp() != fp(phase_config=LatencyPhase(enabled=True, suites=[Path("x")], passes=3))
+    assert fp() != fp(phase="quality")
+    assert fp() != fp(requests_digest="abc")
 
 
 def test_effective_sampling(tmp_path: Path) -> None:
@@ -252,7 +255,7 @@ def test_effective_sampling(tmp_path: Path) -> None:
 
 
 def test_latency_needs_suites() -> None:
-    with pytest.raises(ValueError, match="lists no suites"):
+    with pytest.raises(ValueError, match="enabled but lists no suites"):
         LatencyPhase(enabled=True)
 
 

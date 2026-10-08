@@ -35,7 +35,26 @@ class RichEvents:
             for line in lines[1:3]:
                 console.print(f"    [dim]{line}[/]", highlight=False)
             return
-        if record.phase == "latency":
+        if record.phase == "quality":
+            m = record.metrics
+            cats = [
+                f"{k.split(':', 1)[1]} {v:.2f}"
+                for k, v in m.items()
+                if k.startswith("score_mean:") and v is not None
+            ]
+            console.print(
+                f"  score {_f(m.get('score_mean'), 3)} · pass {_pct(m.get('pass_rate'))}"
+                f" · {int(m.get('scored') or 0)} scored"
+                + (
+                    f" · {int(m['judge_pending'] or 0)} awaiting judge"
+                    if m.get("judge_pending")
+                    else ""
+                ),
+                highlight=False,
+            )
+            if cats:
+                console.print(f"  [dim]{' · '.join(cats)}[/]", highlight=False)
+        if record.phase in ("latency", "quality"):
             m = record.metrics
             console.print(
                 f"  TTFT p50 {_f(m.get('ttft_ms_p50'))} ms · p95 {_f(m.get('ttft_ms_p95'))} ms"
@@ -97,8 +116,12 @@ def run(
         raise typer.Exit(1)
 
 
-def _f(v: float | None) -> str:
-    return "-" if v is None else f"{v:.1f}"
+def _f(v: float | None, digits: int = 1) -> str:
+    return "-" if v is None else f"{v:.{digits}f}"
+
+
+def _pct(v: float | None) -> str:
+    return "-" if v is None else f"{v:.0%}"
 
 
 def _telemetry_line(record: RunRecord) -> str:

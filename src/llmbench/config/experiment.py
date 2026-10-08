@@ -72,12 +72,8 @@ class BenchPhase(Strict):
     unstable_cv: Annotated[float, Field(gt=0)] = 0.05
 
 
-class LatencyPhase(Strict):
-    """llama-server phase: send each suite's requests one at a time and time them.
-
-    Measures what a user sees (TTFT, inter-token latency, end-to-end) plus the server's own
-    prompt/generation throughput. Prompt caching is disabled per request.
-    """
+class SuitePhase(Strict):
+    """A llama-server phase that sends suites of requests one at a time."""
 
     enabled: bool = False
     suites: list[Path] = []
@@ -90,13 +86,30 @@ class LatencyPhase(Strict):
     @model_validator(mode="after")
     def _suites(self) -> Self:
         if self.enabled and not self.suites:
-            raise ValueError("latency phase is enabled but lists no suites")
+            raise ValueError("phase is enabled but lists no suites")
         return self
+
+
+class LatencyPhase(SuitePhase):
+    """User-facing latency: TTFT, inter-token latency, end-to-end, plus server throughput.
+
+    Prompt caching is disabled per request (ADR-0013). Usually fed with synthetic suites.
+    """
+
+
+class QualityPhase(SuitePhase):
+    """Output quality: each response is scored by the item's (or suite's) evaluator.
+
+    Latency metrics are recorded too, so quality and speed can be compared per config.
+    """
+
+    warmup_requests: Annotated[int, Field(ge=0)] = 0
 
 
 class Phases(Strict):
     bench: BenchPhase = BenchPhase()
     latency: LatencyPhase = LatencyPhase()
+    quality: QualityPhase = QualityPhase()
 
 
 class Telemetry(Strict):

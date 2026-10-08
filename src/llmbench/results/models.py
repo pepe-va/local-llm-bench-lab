@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-type Phase = Literal["bench", "latency"]
+type Phase = Literal["bench", "latency", "quality"]
 type RunStatus = Literal["completed", "failed", "interrupted"]
 type TestKind = Literal["pp", "tg", "pg"]
 
@@ -54,6 +54,14 @@ class RequestResult:
     itl_ms: list[float] = field(default_factory=list[float], repr=False)
     """Gaps between consecutive streamed token events."""
     content: str = field(default="", repr=False)
+    reasoning: str = field(default="", repr=False)
+    """Thinking text, when the server separates it (`reasoning_format`)."""
+    prompt_text: str | None = field(default=None, repr=False)
+    category: str | None = None
+    score: float | None = None
+    passed: bool | None = None
+    eval_detail: str | None = None
+    judge_pending: bool = False
 
 
 @dataclass(frozen=True)
@@ -79,6 +87,7 @@ class RunRecord:
     cooldown: dict[str, Any] | None = None
     measurements: list[Measurement] = field(default_factory=list[Measurement])
     suite: str | None = None
+    suite_provenance: dict[str, Any] | None = None
     metrics: dict[str, float | None] = field(default_factory=dict[str, float | None])
     """Aggregates of a latency run (ttft_ms_p50, gen_tps_mean, ...)."""
     requests: list[RequestResult] = field(default_factory=list[RequestResult])

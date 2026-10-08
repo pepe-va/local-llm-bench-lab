@@ -14,7 +14,7 @@ from llmbench.telemetry.sampler import Sample
 _HASH_CHUNK = 8 * 1024 * 1024
 
 
-def _migrations() -> list[tuple[int, str]]:
+def migrations() -> list[tuple[int, str]]:
     files = resources.files("llmbench.results") / "migrations"
     out: list[tuple[int, str]] = []
     for f in files.iterdir():
@@ -38,7 +38,7 @@ class Store:
 
     def _migrate(self) -> None:
         current: int = self.db.execute("PRAGMA user_version").fetchone()[0]
-        for version, sql in _migrations():
+        for version, sql in migrations():
             if version > current:
                 with self.db:
                     self.db.executescript(sql)
@@ -64,8 +64,8 @@ class Store:
                 """INSERT INTO runs (fingerprint, experiment, phase, status, error,
                     build_id, build_commit, backend, model_id, model_sha256,
                     build, model, variant, config, argv, ignored, env, telemetry, cooldown,
-                    started_at, finished_at, duration_s, suite)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    started_at, finished_at, duration_s, suite, suite_provenance)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     run.fingerprint,
                     run.experiment,
@@ -90,6 +90,7 @@ class Store:
                     run.finished_at,
                     run.duration_s,
                     run.suite,
+                    j(run.suite_provenance) if run.suite_provenance is not None else None,
                 ),
             )
             run_id = cur.lastrowid
@@ -123,8 +124,9 @@ class Store:
             self.db.executemany(
                 """INSERT INTO requests (run_id, idx, request_id, pass, ok, error, ttft_ms,
                     e2e_ms, prompt_n, prompt_ms, predicted_n, predicted_ms, prompt_tps, gen_tps,
-                    cache_n, stop_type, itl_ms, content)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    cache_n, stop_type, itl_ms, content, reasoning, prompt_text, category, score,
+                    passed, eval_detail, judge_pending)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 [
                     (
                         run_id,
@@ -145,6 +147,13 @@ class Store:
                         r.stop_type,
                         j(r.itl_ms),
                         r.content,
+                        r.reasoning or None,
+                        r.prompt_text,
+                        r.category,
+                        r.score,
+                        None if r.passed is None else int(r.passed),
+                        r.eval_detail,
+                        int(r.judge_pending),
                     )
                     for i, r in enumerate(run.requests)
                 ],
@@ -180,14 +189,14 @@ class Store:
         ).fetchall()
         return [dict(r) for r in rows]
 
-    def latency_rows(self, experiment: str) -> list[dict[str, Any]]:
-        """Latency runs: latest attempt per fingerprint, metrics as columns."""
+    def latency_rows(self, experiment: str, phase: str = "latency") -> list[dict[str, Any]]:
+        """llama-server runs of a phase: latest attempt per fingerprint, metrics as columns."""
         runs = self.db.execute(
             """SELECT * FROM runs r
-               WHERE experiment = ? AND phase = 'latency' AND id = (
+               WHERE experiment = ? AND phase = ? AND id = (
                    SELECT MAX(id) FROM runs WHERE fingerprint = r.fingerprint)
                ORDER BY id""",
-            (experiment,),
+            (experiment, phase),
         ).fetchall()
         out: list[dict[str, Any]] = []
         for r in runs:

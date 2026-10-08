@@ -1,6 +1,6 @@
 [project]
 name = "local-llm-bench-lab"
-version = "0.4.0"
+version = "0.5.0"
 description = "Reproducible benchmarking lab for local LLMs on llama.cpp"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -8,6 +8,7 @@ license = { text = "MIT" }
 dependencies = [
     "httpx>=0.28",
     "huggingface-hub>=0.34",
+    "jsonschema>=4.23",
     "psutil>=7.0",
     "pydantic>=2.11",
     "rich>=14.0",
@@ -16,7 +17,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-hf-datasets = ["datasets>=4.0"]
+hf-datasets = ["pyarrow>=21.0"]
 report = ["jinja2>=3.1", "plotly>=6.0", "matplotlib>=3.10"]
 parquet = ["pyarrow>=21.0"]
 nvidia = ["nvidia-ml-py>=12.570"]
@@ -29,10 +30,12 @@ dev = [
     "basedpyright>=1.31",
     "hypothesis>=6.135",
     "pre-commit>=4.2",
+    "pyarrow>=21.0",
     "pytest>=8.4",
     "pytest-cov>=6.2",
     "ruff>=0.12",
     "syrupy>=4.9",
+    "types-jsonschema>=4.26.0.20261006",
 ]
 
 [build-system]

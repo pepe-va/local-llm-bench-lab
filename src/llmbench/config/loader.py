@@ -27,8 +27,9 @@ def load_experiment(path: Path) -> Experiment:
         exp = Experiment.model_validate(_interpolate(raw))
     except ValidationError as e:
         raise ConfigError(_format_errors(e, path, root_doc)) from None
-    for suite in exp.phases.latency.suites if exp.phases.latency.enabled else []:
-        load_suite(suite)  # fail early on a broken suite
+    for phase in (exp.phases.latency, exp.phases.quality):
+        for suite in phase.suites if phase.enabled else []:
+            load_suite(suite)  # fail early on a broken suite
     return exp
 
 
@@ -70,10 +71,11 @@ def _load_tree(path: Path, stack: tuple[Path, ...]) -> tuple[dict[str, Any], Com
 
 def _anchor_paths(data: dict[str, Any], base: Path) -> None:
     """Make file references relative to the YAML that declares them (also through `extends`)."""
-    latency = _node(data, "phases", "latency")
-    suites = latency.get("suites") if latency is not None else None
-    if latency is not None and isinstance(suites, list):
-        latency["suites"] = [_anchored(str(s), base) for s in cast(list[Any], suites)]
+    for phase in ("latency", "quality"):
+        node = _node(data, "phases", phase)
+        suites = node.get("suites") if node is not None else None
+        if node is not None and isinstance(suites, list):
+            node["suites"] = [_anchored(str(s), base) for s in cast(list[Any], suites)]
 
 
 def _node(data: dict[str, Any], *keys: str) -> dict[str, Any] | None:
@@ -97,6 +99,9 @@ def load_suite(path: Path) -> Suite:
     corpus = synthetic.get("corpus") if synthetic is not None else None
     if synthetic is not None and isinstance(corpus, str) and corpus != "words":
         synthetic["corpus"] = _anchored(corpus, path.parent)
+    file = _node(doc, "source", "file")
+    if file is not None and isinstance(file.get("path"), str):
+        file["path"] = _anchored(str(file["path"]), path.parent)
     try:
         return Suite.model_validate(_interpolate(doc))
     except ValidationError as e:

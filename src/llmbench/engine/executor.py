@@ -10,7 +10,7 @@ from pathlib import Path
 from llmbench.config.experiment import Experiment, ModelSpec
 from llmbench.engine import env as envmod
 from llmbench.engine.phases.bench import run_bench_spec
-from llmbench.engine.phases.latency import ServerPool, run_latency_spec
+from llmbench.engine.phases.suites import ServerPool, run_suite_spec
 from llmbench.engine.planner import Plan, RunSpec
 from llmbench.engine.runtime import Events, ModelHandle, RunContext, output_dir
 from llmbench.hub.gguf_meta import GGUFError, read_gguf
@@ -123,7 +123,7 @@ def execute(
                 ctx, spec, resolved=resolved, models=models, pool=pool, index=i, total=total
             )
             nxt = plan.runs[i] if i < total else None
-            if nxt is None or nxt.phase != "latency" or nxt.server_key() != spec.server_key():
+            if nxt is None or nxt.phase == "bench" or nxt.server_key() != spec.server_key():
                 pool.release()  # before retention may delete the model it serves
             models.done_with(i - 1, spec.model)
             if status is None:
@@ -140,6 +140,7 @@ def execute(
         if "csv" in exp.output.formats:
             export.write_csv(out / "summary.csv", store, exp.experiment.name)
             export.write_latency_csv(out / "latency.csv", store, exp.experiment.name)
+            export.write_quality_csv(out / "quality.csv", store, exp.experiment.name)
         store.close()
     return summary
 
@@ -167,7 +168,7 @@ def _dispatch(
         if draft is None:
             ctx.events.run_skipped(index, total, spec, "draft model could not be resolved")
             return "failed"
-    return run_latency_spec(
+    return run_suite_spec(
         ctx, spec, rb=rb, model=model, draft=draft, pool=pool, index=index, total=total
     )
 

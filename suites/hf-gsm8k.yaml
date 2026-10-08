@@ -1,0 +1,22 @@
+# GSM8K (grade-school math) from the Hugging Face Hub, read from its parquet conversion.
+# Needs pyarrow: `uv sync --extra hf-datasets`. Pin `revision` for a repeatable series.
+version: 1
+name: gsm8k
+description: 50 shuffled GSM8K test questions, answer extracted after '####'.
+endpoint: chat
+system: You are a careful math tutor. Think step by step, then give the final answer.
+template: "{prompt}\n\nEnd your answer with a final line of the form: #### <number>"
+max_tokens: 512
+source:
+  hf_dataset:
+    repo: openai/gsm8k
+    config: main
+    split: test
+    limit: 50
+    shuffle_seed: 42
+columns: { prompt: question, reference: answer }
+evaluator:
+  type: regex_extract
+  pattern: "####\\s*\\$?(-?[\\d,]*\\.?\\d+)"
+  reference_pattern: "####\\s*(-?[\\d,]*\\.?\\d+)"
+  compare: numeric

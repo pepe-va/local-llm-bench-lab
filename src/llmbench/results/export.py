@@ -85,13 +85,58 @@ LATENCY_COLUMNS = [
 ]
 
 
+QUALITY_METRICS = [
+    "requests",
+    "requests_failed",
+    "scored",
+    "score_mean",
+    "pass_rate",
+    "judge_pending",
+    "ttft_ms_p50",
+    "e2e_ms_p50",
+    "gen_tps_mean",
+    "words_per_s_mean",
+]
+
+
 def write_latency_csv(path: Path, store: Store, experiment: str) -> int:
-    rows = store.latency_rows(experiment)
+    return _write_server_csv(path, store, experiment, "latency", LATENCY_METRICS)
+
+
+def write_quality_csv(path: Path, store: Store, experiment: str) -> int:
+    return _write_server_csv(path, store, experiment, "quality", QUALITY_METRICS, extra=True)
+
+
+def _write_server_csv(
+    path: Path,
+    store: Store,
+    experiment: str,
+    phase: str,
+    metrics: list[str],
+    *,
+    extra: bool = False,
+) -> int:
+    rows = store.latency_rows(experiment, phase)
     if not rows:
         return 0
+    # quality runs also get per-category and judge columns (whatever the runs recorded)
+    names = list(metrics)
+    if extra:
+        for r in rows:
+            names += [
+                k[2:]
+                for k in r
+                if k.startswith("m.")
+                and k[2:] not in names
+                and (k.startswith("m.score_mean:") or k.startswith("m.judge."))
+            ]
+    columns = [c for c in LATENCY_COLUMNS if c not in LATENCY_METRICS]
+    columns = (
+        columns[: columns.index("temp_peak_c")] + names + columns[columns.index("temp_peak_c") :]
+    )
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=LATENCY_COLUMNS)
+        w = csv.DictWriter(f, fieldnames=columns)
         w.writeheader()
         for r in rows:
             model: dict[str, Any] = json.loads(r["model"])
@@ -107,7 +152,7 @@ def write_latency_csv(path: Path, store: Store, experiment: str) -> int:
                     "build_commit": r["build_commit"],
                     "suite": r["suite"],
                     "variant": ";".join(f"{k}={v}" for k, v in variant.items()),
-                    **{m: _round(r.get(f"m.{m}"), 3) for m in LATENCY_METRICS},
+                    **{m: _round(r.get(f"m.{m}"), 3) for m in names},
                     "temp_peak_c": tel.get("temp_peak_c"),
                     "started_at": r["started_at"],
                     "fingerprint": r["fingerprint"][:12],

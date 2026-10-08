@@ -1,8 +1,8 @@
 """Experiment -> ordered list of runs, and run fingerprints.
 
-Order: every bench run first, then latency runs grouped by *server key* (build, model and the
-non-sampling config), so each llama-server process is started once and reused across suites
-and sampling variants.
+Order: every bench run first, then the llama-server runs (latency and quality) grouped by
+*server key* (build, model and the non-sampling config), so each server process is started once
+and reused across phases, suites and sampling variants.
 """
 
 import hashlib
@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from llmbench.config.experiment import BenchPhase, BuildSpec, Experiment, LatencyPhase, ModelSpec
+from llmbench.config.experiment import BenchPhase, BuildSpec, Experiment, ModelSpec, SuitePhase
 from llmbench.config.llama import LlamaConfig
 from llmbench.config.loader import load_suite
 from llmbench.config.matrix import Variant, apply_variant
@@ -20,7 +20,8 @@ from llmbench.results.models import Phase
 
 # Fields that do not change what is measured, so they stay out of the fingerprint.
 _NON_IDENTITY_BENCH_FIELDS = {"enabled", "timeout_s", "unstable_cv"}
-_NON_IDENTITY_LATENCY_FIELDS = {"enabled", "suites", "request_timeout_s", "startup_timeout_s"}
+_NON_IDENTITY_SUITE_FIELDS = {"enabled", "suites", "request_timeout_s", "startup_timeout_s"}
+SERVER_PHASES: tuple[Phase, ...] = ("latency", "quality")
 
 
 @dataclass(frozen=True)
@@ -52,8 +53,8 @@ class Plan:
     variants: int
     tests_per_run: int
     repetitions: int
-    suites: list[Suite] = field(default_factory=list[Suite])
-    passes: int = 1
+    suites: dict[Phase, list[Suite]] = field(default_factory=dict[Phase, list[Suite]])
+    passes: dict[Phase, int] = field(default_factory=dict[Phase, int])
 
     @property
     def bench_runs(self) -> list[RunSpec]:
@@ -62,6 +63,14 @@ class Plan:
     @property
     def latency_runs(self) -> list[RunSpec]:
         return [r for r in self.runs if r.phase == "latency"]
+
+    @property
+    def quality_runs(self) -> list[RunSpec]:
+        return [r for r in self.runs if r.phase == "quality"]
+
+    @property
+    def server_runs(self) -> list[RunSpec]:
+        return [r for r in self.runs if r.phase in SERVER_PHASES]
 
     @property
     def total_tests(self) -> int:
@@ -73,11 +82,14 @@ class Plan:
 
     @property
     def servers(self) -> int:
-        return len({r.server_key() for r in self.latency_runs})
+        return len({r.server_key() for r in self.server_runs})
 
-    @property
-    def total_requests(self) -> int:
-        return sum(_suite_size(r.suite) for r in self.latency_runs) * self.passes
+    def requests(self, phase: Phase) -> int | None:
+        """Timed requests of a phase; None if a dataset's size is unknown before download."""
+        sizes = [suite_size(r.suite) for r in self.runs if r.phase == phase]
+        if any(s is None for s in sizes):
+            return None
+        return sum(s or 0 for s in sizes) * self.passes.get(phase, 1)
 
 
 def make_plan(exp: Experiment, *, model_ids: list[str] | None = None) -> Plan:
@@ -91,32 +103,28 @@ def make_plan(exp: Experiment, *, model_ids: list[str] | None = None) -> Plan:
     variants = exp.matrix.expand()
     configs = [(v, apply_variant(exp.defaults, v)) for v in variants]
     bench = exp.phases.bench
-    latency = exp.phases.latency
+    runs = _bench_runs(exp, models, configs) if bench.enabled else []
 
-    runs: list[RunSpec] = []
-    if bench.enabled:
-        for build in exp.llama_cpp.builds:
-            for model in models:
-                seen: set[str] = set()
-                for variant, cfg in configs:
-                    key = _canonical(cfg.bench_identity())
-                    if key in seen:  # e.g. variants that only differ in sampling
-                        continue
-                    seen.add(key)
-                    runs.append(RunSpec("bench", build, model, variant, cfg))
-
-    suites: list[tuple[Path, Suite]] = []
-    if latency.enabled:
-        suites = [(p, load_suite(p)) for p in latency.suites]
-        lat: list[RunSpec] = []
-        for build in exp.llama_cpp.builds:
-            for model in models:
-                for variant, cfg in configs:
-                    for path, suite in suites:
-                        lat.append(RunSpec("latency", build, model, variant, cfg, suite, path))
-        # stable sort: keeps matrix order inside each server group
-        order = {k: i for i, k in enumerate(dict.fromkeys(r.server_key() for r in lat))}
-        runs += sorted(lat, key=lambda r: order[r.server_key()])
+    suites: dict[Phase, list[Suite]] = {}
+    passes: dict[Phase, int] = {}
+    served: list[RunSpec] = []
+    for phase in SERVER_PHASES:
+        cfg_phase = phase_config(exp, phase)
+        if not cfg_phase.enabled:
+            continue
+        loaded = [(p, load_suite(p)) for p in cfg_phase.suites]
+        suites[phase] = [s for _, s in loaded]
+        passes[phase] = cfg_phase.passes
+        served += [
+            RunSpec(phase, build, model, variant, cfg, suite, path)
+            for build in exp.llama_cpp.builds
+            for model in models
+            for variant, cfg in configs
+            for path, suite in loaded
+        ]
+    # stable sort: keeps phase and matrix order inside each server group
+    order = {k: i for i, k in enumerate(dict.fromkeys(r.server_key() for r in served))}
+    runs += sorted(served, key=lambda r: order[r.server_key()])
 
     return Plan(
         runs=runs,
@@ -125,9 +133,29 @@ def make_plan(exp: Experiment, *, model_ids: list[str] | None = None) -> Plan:
         variants=len(variants),
         tests_per_run=tests_per_run(bench),
         repetitions=bench.repetitions,
-        suites=[s for _, s in suites],
-        passes=latency.passes,
+        suites=suites,
+        passes=passes,
     )
+
+
+def _bench_runs(
+    exp: Experiment, models: list[ModelSpec], configs: list[tuple[Variant, LlamaConfig]]
+) -> list[RunSpec]:
+    runs: list[RunSpec] = []
+    for build in exp.llama_cpp.builds:
+        for model in models:
+            seen: set[str] = set()
+            for variant, cfg in configs:
+                key = _canonical(cfg.bench_identity())
+                if key in seen:  # e.g. variants that only differ in sampling
+                    continue
+                seen.add(key)
+                runs.append(RunSpec("bench", build, model, variant, cfg))
+    return runs
+
+
+def phase_config(exp: Experiment, phase: Phase) -> SuitePhase:
+    return exp.phases.latency if phase == "latency" else exp.phases.quality
 
 
 def tests_per_run(bench: BenchPhase) -> int:
@@ -155,33 +183,51 @@ def fingerprint(
     )
 
 
-def latency_fingerprint(
+def suite_fingerprint(
     *,
+    phase: Phase,
     build: dict[str, Any],
     model_sha256: str,
     draft_sha256: str | None,
     config: LlamaConfig,
     sampling: dict[str, Any],
     suite: Suite,
-    latency: LatencyPhase,
+    phase_config: SuitePhase,
+    requests_digest: str | None = None,
 ) -> str:
-    """Identity of a latency run. Requests are derived deterministically from the suite."""
+    """Identity of a llama-server run.
+
+    Synthetic requests derive deterministically from the suite and the model's tokenizer; for
+    items/files/datasets the digest of the materialized requests is included.
+    """
     return _sha(
         {
-            "phase": "latency",
+            "phase": phase,
             "build": build,
             "model_sha256": model_sha256,
             "draft_sha256": draft_sha256,
             "config": config.server_identity(),
             "sampling": sampling,
-            "suite": suite.model_dump(mode="json"),
-            "latency": latency.model_dump(mode="json", exclude=_NON_IDENTITY_LATENCY_FIELDS),
+            "suite": suite.model_dump(mode="json", by_alias=True),
+            "requests": requests_digest,
+            "phase_config": phase_config.model_dump(
+                mode="json", exclude=_NON_IDENTITY_SUITE_FIELDS
+            ),
         }
     )
 
 
-def _suite_size(suite: Suite | None) -> int:
-    return suite.source.synthetic.count if suite is not None else 0
+def suite_size(suite: Suite | None) -> int | None:
+    if suite is None:
+        return 0
+    src = suite.source
+    if src.synthetic is not None:
+        return src.synthetic.count
+    if src.items is not None:
+        return len(src.items)
+    if src.hf_dataset is not None:
+        return src.hf_dataset.limit
+    return None
 
 
 def _canonical(payload: Any) -> str:

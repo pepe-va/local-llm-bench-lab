@@ -55,3 +55,25 @@ def latency_metrics(results: list[RequestResult]) -> dict[str, float | None]:
     out["prompt_tokens_total"] = float(sum(r.prompt_n or 0 for r in ok))
     out["gen_tokens_total"] = float(sum(r.predicted_n or 0 for r in ok))
     return out
+
+
+def quality_metrics(results: list[RequestResult]) -> dict[str, float | None]:
+    """Scores of a quality run (objective evaluators only; judge scores are added later)."""
+    scored = [r for r in results if r.ok and r.score is not None]
+    out: dict[str, float | None] = {
+        "scored": float(len(scored)),
+        "score_mean": statistics.fmean(r.score for r in scored if r.score is not None)
+        if scored
+        else None,
+        "pass_rate": sum(1 for r in scored if r.passed) / len(scored) if scored else None,
+        "judge_pending": float(sum(1 for r in results if r.judge_pending)),
+    }
+    categories = sorted({r.category for r in scored if r.category})
+    for c in categories:
+        xs = [r.score for r in scored if r.category == c and r.score is not None]
+        out[f"score_mean:{c}"] = statistics.fmean(xs) if xs else None
+    chars = [len(r.content) / (r.e2e_ms / 1000) for r in results if r.ok and r.e2e_ms]
+    words = [len(r.content.split()) / (r.e2e_ms / 1000) for r in results if r.ok and r.e2e_ms]
+    out["chars_per_s_mean"] = statistics.fmean(chars) if chars else None
+    out["words_per_s_mean"] = statistics.fmean(words) if words else None
+    return out

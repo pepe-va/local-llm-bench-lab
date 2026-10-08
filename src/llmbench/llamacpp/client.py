@@ -30,22 +30,38 @@ class LlamaClient:
         """Tokens the model adds in front of a prompt (BOS), as the server would."""
         return self.tokenize("", add_special=True)
 
-    def complete(self, req: Request, sampling: dict[str, Any]) -> RequestResult:
-        body = {
-            **sampling,
-            "prompt": req.prompt,
-            "n_predict": req.n_predict,
-            "stream": True,
-            "cache_prompt": False,  # every request processes its full prompt
-        }
+    def complete(
+        self, req: Request, sampling: dict[str, Any], *, endpoint: str = "completion"
+    ) -> RequestResult:
+        """Stream one request; `endpoint` is `completion` (raw) or `chat` (chat template)."""
+        if endpoint == "chat":
+            path = "/v1/chat/completions"
+            body: dict[str, Any] = {
+                **sampling,
+                "messages": req.messages(),
+                "max_tokens": req.n_predict,
+                "stream_options": {"include_usage": True},
+            }
+        else:
+            path = "/completion"
+            body = {**sampling, "prompt": req.prompt, "n_predict": req.n_predict}
+        body |= {"stream": True, "cache_prompt": False}  # full prompt processing every time
+        return self._stream(req, path, body, chat=endpoint == "chat")
+
+    def _stream(
+        self, req: Request, path: str, body: dict[str, Any], *, chat: bool
+    ) -> RequestResult:
         t0 = time.perf_counter()
         first: float | None = None
         last: float | None = None
         itl: list[float] = []
         parts: list[str] = []
-        final: dict[str, Any] = {}
+        thinking: list[str] = []
+        timings: dict[str, Any] = {}
+        stop_type: str | None = None
+        done = False
         try:
-            with self._http.stream("POST", "/completion", json=body) as r:
+            with self._http.stream("POST", path, json=body) as r:
                 if r.status_code != 200:  # noqa: PLR2004
                     r.read()
                     error = f"HTTP {r.status_code}: {r.text[:300]}"
@@ -53,37 +69,64 @@ class LlamaClient:
                 for line in r.iter_lines():
                     if not line.startswith("data: "):
                         continue
+                    if line == "data: [DONE]":
+                        done = True
+                        break
                     event: dict[str, Any] = json.loads(line[6:])
                     now = time.perf_counter()
-                    if event.get("content") or event.get("tokens"):
+                    text, reasoning, finish = _delta(event, chat=chat)
+                    if text or reasoning or (not chat and event.get("tokens")):
                         if first is None:
                             first = now
                         elif last is not None:
                             itl.append((now - last) * 1000)
                         last = now
-                        parts.append(event.get("content", ""))
-                    if event.get("stop"):
-                        final = event
+                        parts.append(text)
+                        thinking.append(reasoning)
+                    if "timings" in event:
+                        timings = event["timings"]
+                    if finish is not None:
+                        stop_type = finish
+                    if not chat and event.get("stop"):
+                        done = True
                         break
         except (httpx.HTTPError, json.JSONDecodeError) as e:
             return RequestResult(req.id, ok=False, error=f"{type(e).__name__}: {e}")
         end = time.perf_counter()
-
-        t: dict[str, Any] = final.get("timings", {})
+        ok = done or bool(timings)
         return RequestResult(
             id=req.id,
-            ok=bool(final),
-            error=None if final else "stream ended without a final event",
+            ok=ok,
+            error=None if ok else "stream ended without a final event",
             ttft_ms=(first - t0) * 1000 if first is not None else None,
             e2e_ms=(end - t0) * 1000,
-            prompt_n=t.get("prompt_n"),
-            prompt_ms=t.get("prompt_ms"),
-            predicted_n=t.get("predicted_n"),
-            predicted_ms=t.get("predicted_ms"),
-            prompt_tps=t.get("prompt_per_second"),
-            gen_tps=t.get("predicted_per_second"),
-            cache_n=t.get("cache_n"),
-            stop_type=final.get("stop_type"),
+            prompt_n=timings.get("prompt_n"),
+            prompt_ms=timings.get("prompt_ms"),
+            predicted_n=timings.get("predicted_n"),
+            predicted_ms=timings.get("predicted_ms"),
+            prompt_tps=timings.get("prompt_per_second"),
+            gen_tps=timings.get("predicted_per_second"),
+            cache_n=timings.get("cache_n"),
+            stop_type=stop_type,
             itl_ms=itl,
             content="".join(parts),
+            reasoning="".join(thinking),
+            prompt_text=req.prompt if isinstance(req.prompt, str) else None,
+            category=req.category,
         )
+
+
+def _delta(event: dict[str, Any], *, chat: bool) -> tuple[str, str, str | None]:
+    """(content, reasoning, finish/stop type) of one SSE event."""
+    if not chat:
+        stop = event.get("stop_type") if event.get("stop") else None
+        return event.get("content") or "", "", stop
+    choices: list[dict[str, Any]] = event.get("choices") or []
+    if not choices:
+        return "", "", None
+    delta: dict[str, Any] = choices[0].get("delta") or {}
+    return (
+        delta.get("content") or "",
+        delta.get("reasoning_content") or "",
+        choices[0].get("finish_reason"),
+    )

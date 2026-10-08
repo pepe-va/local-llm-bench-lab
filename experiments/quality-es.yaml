@@ -1,0 +1,21 @@
+# Which model writes Spanish best (PRD §41), and how fast, on the same hardware.
+version: 1
+extends: [_profiles/pi5.yaml, _profiles/deterministic.yaml]
+
+experiment:
+  name: quality-es
+  tags: [pi5, quality, spanish]
+
+models:
+  - { id: qwen3-1.7b-q4km, source: "hf://unsloth/Qwen3-1.7B-GGUF:Q4_K_M" }
+  - { id: gemma3-1b-q4km, source: "hf://unsloth/gemma-3-1b-it-GGUF:Q4_K_M" }
+
+defaults:
+  load: { threads: 4, ctx_size: 4096 }
+  server: { reasoning: "off" }        # judge the answer, not the thinking
+
+phases:
+  bench: { enabled: false }
+  quality:
+    enabled: true
+    suites: [../suites/es-writing.yaml, ../suites/hf-gsm8k.yaml]

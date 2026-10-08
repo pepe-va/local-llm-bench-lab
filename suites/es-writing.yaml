@@ -1,0 +1,148 @@
+# Redacción en español (PRD §16 y §31): textos controlados, misma entrada para todos los modelos.
+# Evaluadores deterministas primero; el juicio subjetivo (gramática, naturalidad, fidelidad) lo
+# añade el juez LLM (phases.judge) y se guarda aparte.
+version: 1
+name: es-writing
+description: Corrección, reescritura, resumen, reducción, restricciones y no inventar.
+endpoint: chat
+system: >-
+  Eres un asistente experto en redacción en español. Responde solo con el texto pedido,
+  sin explicaciones ni comillas.
+max_tokens: 256
+source:
+  items:
+    - id: correccion-1
+      category: correccion
+      input: Ayer estuvimos hablando de los cambios pero no llegamos a ninguna conclusion porque faltaban datos.
+      prompt: |
+        Corrige únicamente los errores ortográficos y de puntuación. No cambies el estilo.
+
+        Texto: Ayer estuvimos hablando de los cambios pero no llegamos a ninguna conclusion porque faltaban datos.
+      reference: Ayer estuvimos hablando de los cambios, pero no llegamos a ninguna conclusión porque faltaban datos.
+      evaluator:
+        type: all
+        of:
+          - { type: contains, values: ["conclusión", "cambios, pero"] }
+          - { type: length, ratio_to: input, min_ratio: 0.9, max_ratio: 1.15 }
+          - { type: llm_judge, criteria: [grammar, faithfulness] }
+    - id: correccion-2
+      category: correccion
+      input: Haber si mañana podemos quedar, aver que te parece la propuesta que me envíastes.
+      prompt: |
+        Corrige los errores del siguiente texto sin cambiar su tono.
+
+        Texto: Haber si mañana podemos quedar, aver que te parece la propuesta que me envíastes.
+      evaluator:
+        type: all
+        of:
+          - { type: contains, values: ["A ver si", "a ver qué"] }
+          - { type: not_contains, values: ["Haber si", "aver", "envíastes"] }
+    - id: reescritura-profesional
+      category: reescritura
+      input: Te escribo porque quería comentarte que seguramente podríamos vernos el lunes para hablar del proyecto y mirar las cosas que faltan.
+      prompt: |
+        Reescribe el siguiente texto para que sea claro, natural y profesional. No inventes información.
+
+        Texto: Te escribo porque quería comentarte que seguramente podríamos vernos el lunes para hablar del proyecto y mirar las cosas que faltan.
+      evaluator:
+        type: all
+        of:
+          - { type: contains, values: ["lunes", "proyecto"] }
+          - { type: not_contains, values: ["martes", "miércoles", "jueves", "viernes", "€", "%"] }
+          - { type: length, ratio_to: input, min_ratio: 0.4, max_ratio: 1.6 }
+          - { type: llm_judge, criteria: [clarity, faithfulness, instruction_following] }
+    - id: claridad-1
+      category: claridad
+      input: La implementación de la solución que se ha decidido llevar a cabo por parte del equipo se realizará en el momento en el que se disponga de los recursos necesarios para ello.
+      prompt: |
+        Reescribe esta frase de forma más clara y directa, en menos palabras, sin perder información.
+
+        Frase: La implementación de la solución que se ha decidido llevar a cabo por parte del equipo se realizará en el momento en el que se disponga de los recursos necesarios para ello.
+      evaluator:
+        type: all
+        of:
+          - { type: contains, values: ["equipo", "recursos"] }
+          - { type: length, ratio_to: input, max_ratio: 0.8 }
+    - id: resumen-1
+      category: resumen
+      input: >-
+        El ayuntamiento ha aprobado un plan para renovar el alumbrado público de la ciudad durante
+        los próximos dos años. La inversión total será de 3 millones de euros y permitirá sustituir
+        las farolas antiguas por luminarias LED, que consumen hasta un 60 % menos de energía. Las
+        obras comenzarán en primavera por los barrios del norte.
+      prompt: |
+        Resume el siguiente texto en una sola frase.
+
+        Texto: El ayuntamiento ha aprobado un plan para renovar el alumbrado público de la ciudad durante los próximos dos años. La inversión total será de 3 millones de euros y permitirá sustituir las farolas antiguas por luminarias LED, que consumen hasta un 60 % menos de energía. Las obras comenzarán en primavera por los barrios del norte.
+      evaluator:
+        type: all
+        of:
+          - { type: contains, values: ["LED"] }
+          - { type: contains, values: ["3 millones", "tres millones", "alumbrado"], mode: any }
+          - { type: length, max_words: 45 }
+          - { type: regex, pattern: "^[^.!?]*[.!?]?\\s*$" }
+    - id: reduccion-1
+      category: reduccion
+      input: >-
+        Queremos informarle de que, debido a tareas de mantenimiento programadas que se llevarán a
+        cabo en nuestros sistemas informáticos, el servicio de atención al cliente no estará
+        disponible el próximo sábado entre las 8:00 y las 14:00. Disculpe las molestias.
+      prompt: |
+        Reduce este aviso a la mitad de palabras como máximo, conservando el día y el horario.
+
+        Aviso: Queremos informarle de que, debido a tareas de mantenimiento programadas que se llevarán a cabo en nuestros sistemas informáticos, el servicio de atención al cliente no estará disponible el próximo sábado entre las 8:00 y las 14:00. Disculpe las molestias.
+      evaluator:
+        type: all
+        of:
+          - { type: contains, values: ["sábado", "8", "14"] }
+          - { type: length, ratio_to: input, max_ratio: 0.5 }
+    - id: estilo-1
+      category: estilo
+      input: ¡Qué pasada de concierto! Los músicos lo dieron todo y el público no paró de cantar.
+      prompt: |
+        Corrige solo si hay errores; mantén el tono informal y entusiasta del texto.
+
+        Texto: ¡Qué pasada de concierto! Los músicos lo dieron todo y el público no paró de cantar.
+      reference: ¡Qué pasada de concierto! Los músicos lo dieron todo y el público no paró de cantar.
+      evaluator:
+        type: weighted
+        pass_threshold: 0.75
+        of:
+          - { weight: 2, evaluator: { type: exact, normalize: [strip, collapse_ws] } }
+          - { weight: 1, evaluator: { type: contains, values: ["¡Qué pasada"] } }
+          - { weight: 1, evaluator: { type: length, ratio_to: input, min_ratio: 0.9, max_ratio: 1.1 } }
+    - id: restricciones-1
+      category: restricciones
+      prompt: Escribe exactamente tres palabras que describan el otoño, separadas por comas y en minúsculas, sin nada más.
+      evaluator: { type: regex, pattern: "^\\s*[a-záéíóúñü]+, [a-záéíóúñü]+, [a-záéíóúñü]+\\.?\\s*$", mode: fullmatch }
+    - id: restricciones-2
+      category: restricciones
+      prompt: 'Devuelve solo un objeto JSON con las claves "ciudad" (texto) y "habitantes" (número entero) para Madrid. Sin texto adicional.'
+      max_tokens: 96
+      evaluator:
+        type: json_schema
+        schema:
+          type: object
+          required: [ciudad, habitantes]
+          properties: { ciudad: { type: string }, habitantes: { type: integer } }
+    - id: no-inventar-1
+      category: no_inventar
+      input: Marta enviará el informe la próxima semana.
+      prompt: |
+        Reescribe en tono formal sin añadir ningún dato que no esté en el texto (ni fechas, ni cifras, ni cargos).
+
+        Texto: Marta enviará el informe la próxima semana.
+      evaluator:
+        type: all
+        of:
+          - { type: contains, values: ["Marta", "informe"] }
+          - { type: not_contains, values: ["lunes", "martes", "miércoles", "jueves", "viernes", "directora", "gerente", "%"] }
+          - { type: regex, pattern: "[^0-9]*", mode: fullmatch }   # sin cifras inventadas
+    - id: no-inventar-2
+      category: no_inventar
+      prompt: |
+        Según este texto, ¿en qué año se fundó la empresa? Si el texto no lo dice, responde exactamente "No consta".
+
+        Texto: La empresa tiene su sede en Valencia y cuenta con 40 empleados.
+      reference: No consta
+      evaluator: { type: exact, normalize: [strip, collapse_ws, lower, strip_punct] }

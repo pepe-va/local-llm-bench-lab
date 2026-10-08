@@ -9,9 +9,10 @@ from llmbench.engine.planner import fingerprint
 from llmbench.llamacpp.bench import parse_jsonl
 from llmbench.results.models import RunRecord
 from llmbench.results.stats import annotate, cv
-from llmbench.results.store import Store, sha256_file
+from llmbench.results.store import Store, migrations, sha256_file
 from tests.conftest import LLAMACPP
 
+LATEST = migrations()[-1][0]
 BUILD: dict[str, object] = {"commit": "c811cb8", "backend": "cpu", "cmake": {}}
 
 
@@ -81,7 +82,7 @@ def record(fingerprint: str, status: str = "completed") -> RunRecord:
 
 def test_store_roundtrip_and_resume(tmp_path: Path) -> None:
     store = Store(tmp_path / "b.sqlite")
-    assert store.schema_version == 2
+    assert store.schema_version == LATEST
     store.save_run(record("f1", "failed"))
     assert not store.is_completed("f1")
     store.save_run(record("f1"))
@@ -93,7 +94,7 @@ def test_store_roundtrip_and_resume(tmp_path: Path) -> None:
 
 def test_migrations_are_idempotent(tmp_path: Path) -> None:
     Store(tmp_path / "b.sqlite").close()
-    assert Store(tmp_path / "b.sqlite").schema_version == 2
+    assert Store(tmp_path / "b.sqlite").schema_version == LATEST
 
 
 def test_model_hash_cache(tmp_path: Path) -> None:
