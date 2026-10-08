@@ -1,0 +1,29 @@
+# User-facing latency on a Raspberry Pi 5: TTFT, inter-token latency and throughput
+# through llama-server, one request at a time, for a few thread/KV settings.
+version: 1
+extends: [_profiles/pi5.yaml, _profiles/deterministic.yaml]
+
+experiment:
+  name: pi5-latency
+  tags: [pi5, latency, server]
+
+models:
+  - id: qwen3-1.7b-q4km
+    source: hf://unsloth/Qwen3-1.7B-GGUF:Q4_K_M
+
+defaults:
+  load: { threads: 4, ctx_size: 4096, batch_size: 512, ubatch_size: 256, flash_attn: auto }
+  server: { parallel: 1 }
+
+matrix:
+  load.threads: [3, 4]
+  zip:
+    - kv.cache_type_k: [f16, q8_0]
+      kv.cache_type_v: [f16, q8_0]
+
+phases:
+  bench: { enabled: false }
+  latency:
+    enabled: true
+    suites: [../suites/synthetic-512x128.yaml, ../suites/synthetic-chat-mix.yaml]
+    warmup_requests: 1

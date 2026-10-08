@@ -9,6 +9,7 @@ from tests.helpers import FakeHub, write_gguf
 FIXTURES = Path(__file__).parent / "fixtures"
 LLAMACPP = FIXTURES / "llamacpp" / "c811cb8"
 FAKE_BENCH = FIXTURES / "bin" / "fake-llama-bench"
+FAKE_SERVER = FIXTURES / "bin" / "fake-llama-server"
 
 
 @pytest.fixture(autouse=True)
@@ -30,12 +31,13 @@ def bench_help() -> str:
 
 @pytest.fixture
 def fake_bin_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """A directory with a `llama-bench` that behaves like the real one (see the script)."""
+    """`llama-bench` and `llama-server` stand-ins that behave like the real ones."""
     d = tmp_path / "bin"
     d.mkdir()
-    target = d / "llama-bench"
-    target.write_text(FAKE_BENCH.read_text())
-    target.chmod(target.stat().st_mode | stat.S_IXUSR)
+    for name, src in (("llama-bench", FAKE_BENCH), ("llama-server", FAKE_SERVER)):
+        target = d / name
+        target.write_text(src.read_text())
+        target.chmod(target.stat().st_mode | stat.S_IXUSR)
     monkeypatch.setenv("FAKE_BENCH_FIXTURE_DIR", str(LLAMACPP))
     return d
 

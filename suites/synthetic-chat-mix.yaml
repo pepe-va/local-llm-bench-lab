@@ -1,0 +1,10 @@
+# Variable, chat-like shapes: short-to-medium prompts and answers.
+version: 1
+name: synthetic-chat-mix
+description: Uniform 64-1024 prompt tokens, ~200 generated tokens (normal, sd 50).
+source:
+  synthetic:
+    prompt_tokens: { dist: uniform, min: 64, max: 1024 }
+    output_tokens: { dist: normal, mean: 200, std: 50, min: 32, max: 400 }
+    count: 30
+    seed: 7

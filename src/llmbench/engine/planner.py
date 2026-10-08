@@ -1,24 +1,47 @@
-"""Experiment -> ordered list of runs, and run fingerprints."""
+"""Experiment -> ordered list of runs, and run fingerprints.
+
+Order: every bench run first, then latency runs grouped by *server key* (build, model and the
+non-sampling config), so each llama-server process is started once and reused across suites
+and sampling variants.
+"""
 
 import hashlib
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
-from llmbench.config.experiment import BenchPhase, BuildSpec, Experiment, ModelSpec
+from llmbench.config.experiment import BenchPhase, BuildSpec, Experiment, LatencyPhase, ModelSpec
 from llmbench.config.llama import LlamaConfig
+from llmbench.config.loader import load_suite
 from llmbench.config.matrix import Variant, apply_variant
+from llmbench.config.suite import Suite
+from llmbench.results.models import Phase
 
 # Fields that do not change what is measured, so they stay out of the fingerprint.
 _NON_IDENTITY_BENCH_FIELDS = {"enabled", "timeout_s", "unstable_cv"}
+_NON_IDENTITY_LATENCY_FIELDS = {"enabled", "suites", "request_timeout_s", "startup_timeout_s"}
 
 
 @dataclass(frozen=True)
 class RunSpec:
+    phase: Phase
     build: BuildSpec
     model: ModelSpec
     variant: Variant
     config: LlamaConfig
+    suite: Suite | None = None
+    suite_path: Path | None = None
+
+    def server_key(self) -> str:
+        """Runs with the same key can share one llama-server process."""
+        return _canonical(
+            {
+                "build": self.build.id,
+                "model": self.model.id,
+                "config": self.config.server_identity(),
+            }
+        )
 
 
 @dataclass(frozen=True)
@@ -29,14 +52,32 @@ class Plan:
     variants: int
     tests_per_run: int
     repetitions: int
+    suites: list[Suite] = field(default_factory=list[Suite])
+    passes: int = 1
+
+    @property
+    def bench_runs(self) -> list[RunSpec]:
+        return [r for r in self.runs if r.phase == "bench"]
+
+    @property
+    def latency_runs(self) -> list[RunSpec]:
+        return [r for r in self.runs if r.phase == "latency"]
 
     @property
     def total_tests(self) -> int:
-        return len(self.runs) * self.tests_per_run
+        return len(self.bench_runs) * self.tests_per_run
 
     @property
     def total_executions(self) -> int:
         return self.total_tests * self.repetitions
+
+    @property
+    def servers(self) -> int:
+        return len({r.server_key() for r in self.latency_runs})
+
+    @property
+    def total_requests(self) -> int:
+        return sum(_suite_size(r.suite) for r in self.latency_runs) * self.passes
 
 
 def make_plan(exp: Experiment, *, model_ids: list[str] | None = None) -> Plan:
@@ -49,20 +90,43 @@ def make_plan(exp: Experiment, *, model_ids: list[str] | None = None) -> Plan:
 
     variants = exp.matrix.expand()
     configs = [(v, apply_variant(exp.defaults, v)) for v in variants]
-    runs = [
-        RunSpec(build, model, variant, cfg)
-        for build in exp.llama_cpp.builds
-        for model in models
-        for variant, cfg in configs
-    ]
     bench = exp.phases.bench
+    latency = exp.phases.latency
+
+    runs: list[RunSpec] = []
+    if bench.enabled:
+        for build in exp.llama_cpp.builds:
+            for model in models:
+                seen: set[str] = set()
+                for variant, cfg in configs:
+                    key = _canonical(cfg.bench_identity())
+                    if key in seen:  # e.g. variants that only differ in sampling
+                        continue
+                    seen.add(key)
+                    runs.append(RunSpec("bench", build, model, variant, cfg))
+
+    suites: list[tuple[Path, Suite]] = []
+    if latency.enabled:
+        suites = [(p, load_suite(p)) for p in latency.suites]
+        lat: list[RunSpec] = []
+        for build in exp.llama_cpp.builds:
+            for model in models:
+                for variant, cfg in configs:
+                    for path, suite in suites:
+                        lat.append(RunSpec("latency", build, model, variant, cfg, suite, path))
+        # stable sort: keeps matrix order inside each server group
+        order = {k: i for i, k in enumerate(dict.fromkeys(r.server_key() for r in lat))}
+        runs += sorted(lat, key=lambda r: order[r.server_key()])
+
     return Plan(
-        runs=runs if bench.enabled else [],
+        runs=runs,
         builds=len(exp.llama_cpp.builds),
         models=len(models),
         variants=len(variants),
         tests_per_run=tests_per_run(bench),
         repetitions=bench.repetitions,
+        suites=[s for _, s in suites],
+        passes=latency.passes,
     )
 
 
@@ -79,13 +143,50 @@ def fingerprint(
     config: LlamaConfig,
     bench: BenchPhase,
 ) -> str:
-    """Stable id of *what is measured*: same inputs on the same build -> same fingerprint."""
-    payload = {
-        "phase": "bench",
-        "build": build,
-        "model_sha256": model_sha256,
-        "config": config.model_dump(mode="json"),
-        "bench": bench.model_dump(mode="json", exclude=_NON_IDENTITY_BENCH_FIELDS),
-    }
-    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(canonical.encode()).hexdigest()
+    """Stable id of a bench measurement: same inputs on the same build -> same fingerprint."""
+    return _sha(
+        {
+            "phase": "bench",
+            "build": build,
+            "model_sha256": model_sha256,
+            "config": config.bench_identity(),
+            "bench": bench.model_dump(mode="json", exclude=_NON_IDENTITY_BENCH_FIELDS),
+        }
+    )
+
+
+def latency_fingerprint(
+    *,
+    build: dict[str, Any],
+    model_sha256: str,
+    draft_sha256: str | None,
+    config: LlamaConfig,
+    sampling: dict[str, Any],
+    suite: Suite,
+    latency: LatencyPhase,
+) -> str:
+    """Identity of a latency run. Requests are derived deterministically from the suite."""
+    return _sha(
+        {
+            "phase": "latency",
+            "build": build,
+            "model_sha256": model_sha256,
+            "draft_sha256": draft_sha256,
+            "config": config.server_identity(),
+            "sampling": sampling,
+            "suite": suite.model_dump(mode="json"),
+            "latency": latency.model_dump(mode="json", exclude=_NON_IDENTITY_LATENCY_FIELDS),
+        }
+    )
+
+
+def _suite_size(suite: Suite | None) -> int:
+    return suite.source.synthetic.count if suite is not None else 0
+
+
+def _canonical(payload: Any) -> str:
+    return json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
+
+
+def _sha(payload: Any) -> str:
+    return hashlib.sha256(_canonical(payload).encode()).hexdigest()

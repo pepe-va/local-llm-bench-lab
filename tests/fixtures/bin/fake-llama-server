@@ -1,0 +1,115 @@
+#!/usr/bin/env python3
+"""Stand-in for llama-server (commit c811cb8) used by integration tests.
+
+- `--help` / `--version` print the captured real outputs ($FAKE_BENCH_FIXTURE_DIR).
+- Serves /health, /props, /tokenize, /metrics and /completion (SSE with `timings`),
+  shaped like the real server. Token arrays are used verbatim; text gets a BOS (id 1).
+- FAKE_SERVER_FAIL_START=1 makes it exit at startup like a failed model load.
+- Each start appends a line to $FAKE_SERVER_STARTS (to count server reuse).
+"""
+
+import json
+import os
+import sys
+import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+
+STATS = {"prompt_tokens_total": 0, "tokens_predicted_total": 0}
+
+
+def fixture(name: str) -> str:
+    return (Path(os.environ["FAKE_BENCH_FIXTURE_DIR"]) / name).read_text()
+
+
+def opt(args: list[str], *names: str, default: str | None = None) -> str | None:
+    for i, a in enumerate(args):
+        if a in names and i + 1 < len(args):
+            return args[i + 1]
+    return default
+
+
+def tokenize(text: str) -> list[int]:
+    return [2 + (sum(map(ord, w)) % 997) for w in text.split()]
+
+
+class Handler(BaseHTTPRequestHandler):
+    def log_message(self, *_: object) -> None:
+        pass
+
+    def _json(self, payload: object, code: int = 200) -> None:
+        body = json.dumps(payload).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_GET(self) -> None:
+        if self.path == "/health":
+            self._json({"status": "ok"})
+        elif self.path == "/props":
+            self._json({"build_info": "b1-c811cb8", "total_slots": int(opt(sys.argv, "-np") or 4)})
+        elif self.path == "/metrics":
+            body = "".join(f"llamacpp:{k} {v}\n" for k, v in STATS.items()).encode()
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        else:
+            self._json({"error": "not found"}, 404)
+
+    def do_POST(self) -> None:
+        req = json.loads(self.rfile.read(int(self.headers["Content-Length"])) or b"{}")
+        if self.path == "/tokenize":
+            bos = [1] if req.get("add_special") else []
+            self._json({"tokens": bos + tokenize(req["content"])})
+            return
+        if self.path != "/completion":
+            self._json({"error": "not found"}, 404)
+            return
+        prompt = req["prompt"]
+        prompt_n = len(prompt) if isinstance(prompt, list) else 1 + len(tokenize(prompt))
+        n = int(req.get("n_predict", 16))
+        STATS["prompt_tokens_total"] += prompt_n
+        STATS["tokens_predicted_total"] += n
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.end_headers()
+        time.sleep(0.002)  # prompt processing
+        for i in range(n):
+            event = {"content": f" w{i}", "tokens": [100 + i], "stop": False}
+            self.wfile.write(f"data: {json.dumps(event)}\n\n".encode())
+            self.wfile.flush()
+            time.sleep(0.0005)
+        timings = {
+            "cache_n": 0 if req.get("cache_prompt") is False else prompt_n,
+            "prompt_n": prompt_n, "prompt_ms": 2.0, "prompt_per_second": prompt_n / 0.002,
+            "predicted_n": n, "predicted_ms": n * 0.5, "predicted_per_second": 2000.0,
+        }
+        final = {"content": "", "stop": True, "stop_type": "limit", "tokens_predicted": n,
+                 "tokens_evaluated": prompt_n, "timings": timings}
+        self.wfile.write(f"data: {json.dumps(final)}\n\n".encode())
+
+
+def main() -> int:
+    args = sys.argv[1:]
+    if "--help" in args:
+        sys.stdout.write(fixture("llama-server.help.txt"))
+        return 0
+    if "--version" in args:
+        sys.stderr.write(fixture("llama-bench.version.txt"))
+        return 0
+    if starts := os.environ.get("FAKE_SERVER_STARTS"):
+        with open(starts, "a") as f:
+            f.write(" ".join(args) + "\n")
+    if os.environ.get("FAKE_SERVER_FAIL_START") == "1":
+        print("llama_model_load: error loading model: tensor data is not within file bounds")
+        return 1
+    server = ThreadingHTTPServer(("127.0.0.1", int(opt(args, "--port") or 8080)), Handler)
+    server.serve_forever()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

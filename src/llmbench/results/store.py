@@ -64,8 +64,8 @@ class Store:
                 """INSERT INTO runs (fingerprint, experiment, phase, status, error,
                     build_id, build_commit, backend, model_id, model_sha256,
                     build, model, variant, config, argv, ignored, env, telemetry, cooldown,
-                    started_at, finished_at, duration_s)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    started_at, finished_at, duration_s, suite)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     run.fingerprint,
                     run.experiment,
@@ -89,6 +89,7 @@ class Store:
                     run.started_at,
                     run.finished_at,
                     run.duration_s,
+                    run.suite,
                 ),
             )
             run_id = cur.lastrowid
@@ -120,6 +121,39 @@ class Store:
                 ],
             )
             self.db.executemany(
+                """INSERT INTO requests (run_id, idx, request_id, pass, ok, error, ttft_ms,
+                    e2e_ms, prompt_n, prompt_ms, predicted_n, predicted_ms, prompt_tps, gen_tps,
+                    cache_n, stop_type, itl_ms, content)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                [
+                    (
+                        run_id,
+                        i,
+                        r.id,
+                        int(r.id.rsplit("#", 1)[1]) if "#" in r.id else 0,
+                        int(r.ok),
+                        r.error,
+                        r.ttft_ms,
+                        r.e2e_ms,
+                        r.prompt_n,
+                        r.prompt_ms,
+                        r.predicted_n,
+                        r.predicted_ms,
+                        r.prompt_tps,
+                        r.gen_tps,
+                        r.cache_n,
+                        r.stop_type,
+                        j(r.itl_ms),
+                        r.content,
+                    )
+                    for i, r in enumerate(run.requests)
+                ],
+            )
+            self.db.executemany(
+                "INSERT INTO run_metrics (run_id, name, value) VALUES (?,?,?)",
+                [(run_id, k, v) for k, v in run.metrics.items()],
+            )
+            self.db.executemany(
                 """INSERT INTO telemetry_samples
                     (run_id, t, temp_c, cpu_freq_mhz, ram_used_mb, proc_rss_mb)
                 VALUES (?,?,?,?,?,?)""",
@@ -131,11 +165,11 @@ class Store:
         return run_id
 
     def summary_rows(self, experiment: str) -> list[dict[str, Any]]:
-        """Latest attempt per fingerprint, one row per measurement (or one for a failed run)."""
+        """Bench runs: latest attempt per fingerprint, one row per measurement."""
         rows = self.db.execute(
             """WITH latest AS (
                    SELECT * FROM runs r
-                   WHERE experiment = ? AND id = (
+                   WHERE experiment = ? AND phase = 'bench' AND id = (
                        SELECT MAX(id) FROM runs WHERE fingerprint = r.fingerprint)
                )
                SELECT l.*, m.test, m.label, m.n_prompt, m.n_gen, m.n_depth, m.avg_ts,
@@ -145,6 +179,25 @@ class Store:
             (experiment,),
         ).fetchall()
         return [dict(r) for r in rows]
+
+    def latency_rows(self, experiment: str) -> list[dict[str, Any]]:
+        """Latency runs: latest attempt per fingerprint, metrics as columns."""
+        runs = self.db.execute(
+            """SELECT * FROM runs r
+               WHERE experiment = ? AND phase = 'latency' AND id = (
+                   SELECT MAX(id) FROM runs WHERE fingerprint = r.fingerprint)
+               ORDER BY id""",
+            (experiment,),
+        ).fetchall()
+        out: list[dict[str, Any]] = []
+        for r in runs:
+            row = dict(r)
+            for name, value in self.db.execute(
+                "SELECT name, value FROM run_metrics WHERE run_id = ?", (r["id"],)
+            ):
+                row[f"m.{name}"] = value
+            out.append(row)
+        return out
 
     # -- model hashes ------------------------------------------------------
 

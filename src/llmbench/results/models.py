@@ -3,6 +3,7 @@
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+type Phase = Literal["bench", "latency"]
 type RunStatus = Literal["completed", "failed", "interrupted"]
 type TestKind = Literal["pp", "tg", "pg"]
 
@@ -34,6 +35,28 @@ class Measurement:
 
 
 @dataclass(frozen=True)
+class RequestResult:
+    """One timed llama-server request (client-side timing + server `timings`)."""
+
+    id: str
+    ok: bool
+    error: str | None = None
+    ttft_ms: float | None = None
+    e2e_ms: float | None = None
+    prompt_n: int | None = None
+    prompt_ms: float | None = None
+    predicted_n: int | None = None
+    predicted_ms: float | None = None
+    prompt_tps: float | None = None
+    gen_tps: float | None = None
+    cache_n: int | None = None
+    stop_type: str | None = None
+    itl_ms: list[float] = field(default_factory=list[float], repr=False)
+    """Gaps between consecutive streamed token events."""
+    content: str = field(default="", repr=False)
+
+
+@dataclass(frozen=True)
 class RunRecord:
     """Everything needed to reproduce and compare one run."""
 
@@ -55,3 +78,7 @@ class RunRecord:
     telemetry: dict[str, Any] | None = None
     cooldown: dict[str, Any] | None = None
     measurements: list[Measurement] = field(default_factory=list[Measurement])
+    suite: str | None = None
+    metrics: dict[str, float | None] = field(default_factory=dict[str, float | None])
+    """Aggregates of a latency run (ttft_ms_p50, gen_tps_mean, ...)."""
+    requests: list[RequestResult] = field(default_factory=list[RequestResult])

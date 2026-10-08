@@ -72,8 +72,31 @@ class BenchPhase(Strict):
     unstable_cv: Annotated[float, Field(gt=0)] = 0.05
 
 
+class LatencyPhase(Strict):
+    """llama-server phase: send each suite's requests one at a time and time them.
+
+    Measures what a user sees (TTFT, inter-token latency, end-to-end) plus the server's own
+    prompt/generation throughput. Prompt caching is disabled per request.
+    """
+
+    enabled: bool = False
+    suites: list[Path] = []
+    """Suite files (resolved relative to the YAML that declares them)."""
+    passes: Annotated[int, Field(ge=1)] = 1
+    warmup_requests: Annotated[int, Field(ge=0)] = 1
+    request_timeout_s: Annotated[float, Field(gt=0)] = 600
+    startup_timeout_s: Annotated[float, Field(gt=0)] = 600
+
+    @model_validator(mode="after")
+    def _suites(self) -> Self:
+        if self.enabled and not self.suites:
+            raise ValueError("latency phase is enabled but lists no suites")
+        return self
+
+
 class Phases(Strict):
     bench: BenchPhase = BenchPhase()
+    latency: LatencyPhase = LatencyPhase()
 
 
 class Telemetry(Strict):

@@ -6,8 +6,9 @@ from llmbench.cli.common import ExperimentArg, console, fail, load
 from llmbench.cli.plan import ModelOpt, print_plan
 from llmbench.config.matrix import variant_label
 from llmbench.engine.env import PreflightError
-from llmbench.engine.executor import execute, output_dir
+from llmbench.engine.executor import execute
 from llmbench.engine.planner import RunSpec, make_plan
+from llmbench.engine.runtime import output_dir
 from llmbench.results.models import RunRecord
 
 
@@ -17,8 +18,8 @@ class RichEvents:
 
     def run_start(self, index: int, total: int, spec: RunSpec) -> None:
         console.print(
-            f"\n[bold][{index}/{total}][/] {spec.model.id} · {spec.build.id} · "
-            f"{variant_label(spec.variant)}",
+            f"\n[bold][{index}/{total}][/] {spec.phase} · {spec.model.id} · {spec.build.id} · "
+            f"{variant_label(spec.variant)}" + (f" · {spec.suite.name}" if spec.suite else ""),
             highlight=False,
         )
 
@@ -34,6 +35,18 @@ class RichEvents:
             for line in lines[1:3]:
                 console.print(f"    [dim]{line}[/]", highlight=False)
             return
+        if record.phase == "latency":
+            m = record.metrics
+            console.print(
+                f"  TTFT p50 {_f(m.get('ttft_ms_p50'))} ms · p95 {_f(m.get('ttft_ms_p95'))} ms"
+                f"   ITL p50 {_f(m.get('itl_ms_p50'))} ms · p95 {_f(m.get('itl_ms_p95'))} ms",
+                highlight=False,
+            )
+            console.print(
+                f"  prompt {_f(m.get('prompt_tps_mean'))} t/s · gen {_f(m.get('gen_tps_mean'))} t/s"
+                f" · e2e p50 {_f(m.get('e2e_ms_p50'))} ms · {int(m.get('requests') or 0)} requests",
+                highlight=False,
+            )
         for m in record.measurements:
             flag = " [yellow](unstable)[/]" if m.unstable else ""
             console.print(
@@ -84,6 +97,10 @@ def run(
         raise typer.Exit(1)
 
 
+def _f(v: float | None) -> str:
+    return "-" if v is None else f"{v:.1f}"
+
+
 def _telemetry_line(record: RunRecord) -> str:
     tel = record.telemetry or {}
     parts: list[str] = []
@@ -91,5 +108,7 @@ def _telemetry_line(record: RunRecord) -> str:
         parts.append(f"temp {tel.get('temp_before_c')} → peak {tel['temp_peak_c']} °C")
     if tel.get("max_rss_mb") is not None:
         parts.append(f"peak RSS {tel['max_rss_mb']:.0f} MB")
+    elif record.metrics.get("server_peak_rss_mb") is not None:
+        parts.append(f"server peak RSS {record.metrics['server_peak_rss_mb']:.0f} MB")
     parts.append(f"{record.duration_s:.2f}s")
     return " · ".join(parts)

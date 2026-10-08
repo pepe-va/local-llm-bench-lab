@@ -1,0 +1,4 @@
+# Greedy decoding with a fixed seed: identical outputs across runs (llama.cpp's own
+# default is temperature 0.8, which makes outputs and their lengths vary).
+defaults:
+  sampling: { temperature: 0, seed: 42 }

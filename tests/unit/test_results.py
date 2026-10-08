@@ -81,7 +81,7 @@ def record(fingerprint: str, status: str = "completed") -> RunRecord:
 
 def test_store_roundtrip_and_resume(tmp_path: Path) -> None:
     store = Store(tmp_path / "b.sqlite")
-    assert store.schema_version == 1
+    assert store.schema_version == 2
     store.save_run(record("f1", "failed"))
     assert not store.is_completed("f1")
     store.save_run(record("f1"))
@@ -93,7 +93,7 @@ def test_store_roundtrip_and_resume(tmp_path: Path) -> None:
 
 def test_migrations_are_idempotent(tmp_path: Path) -> None:
     Store(tmp_path / "b.sqlite").close()
-    assert Store(tmp_path / "b.sqlite").schema_version == 1
+    assert Store(tmp_path / "b.sqlite").schema_version == 2
 
 
 def test_model_hash_cache(tmp_path: Path) -> None:

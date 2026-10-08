@@ -1,9 +1,14 @@
+from collections.abc import Callable
+from pathlib import Path
+
 from llmbench.cli.common import ExperimentArg, console, fail, load
+from llmbench.config.llama import LlamaConfig
+from llmbench.config.loader import load_suite
 from llmbench.config.matrix import apply_variant
 from llmbench.engine.planner import make_plan
 from llmbench.hub.store import ModelNotFoundError, ModelStore
 from llmbench.llamacpp import builds
-from llmbench.llamacpp.argv import bench_argv
+from llmbench.llamacpp.argv import Argv, bench_argv, server_argv
 from llmbench.llamacpp.introspect import IntrospectionError, binary_flags, unknown_flags
 
 
@@ -23,38 +28,59 @@ def validate(experiment: ExperimentArg) -> None:
             problems += 1
             console.print(f"[red]✗[/] {e}")
 
-    bench = exp.phases.bench
+    variants = [apply_variant(exp.defaults, v) for v in exp.matrix.expand()]
+    tools: list[tuple[str, Callable[[Path, LlamaConfig], Argv]]] = []
+    if exp.phases.bench.enabled:
+        tools.append(("llama-bench", lambda b, c: bench_argv(b, b, c, exp.phases.bench)))
+    if exp.phases.latency.enabled:
+        tools.append(
+            (
+                "llama-server",
+                lambda b, c: server_argv(
+                    b, b, c, port=0, draft_model=b if c.speculative.draft_model else None
+                ),
+            )
+        )
+        for suite in exp.phases.latency.suites:
+            console.print(f"[green]✓[/] suite {load_suite(suite).name}: {suite}")
     for spec in exp.llama_cpp.builds:
         try:
             rb = builds.resolve(spec)
-            supported = binary_flags(rb.tool("llama-bench"))
-        except (builds.BuildError, IntrospectionError) as e:
+        except builds.BuildError as e:
             console.print(f"[yellow]•[/] build {spec.id}: flags not checked ({e})")
             continue
-        bad: set[str] = set()
-        ignored: set[str] = set()
-        for variant in exp.matrix.expand():
-            argv = bench_argv(
-                rb.tool("llama-bench"),
-                rb.bin_dir / "model.gguf",
-                apply_variant(exp.defaults, variant),
-                bench,
-            )
-            bad |= set(unknown_flags(argv.args, supported))
-            ignored |= set(argv.ignored)
-        if bad:
-            problems += 1
-            console.print(
-                f"[red]✗[/] build {spec.id} ({rb.commit[:12]}) lacks: {', '.join(sorted(bad))}"
-            )
-        else:
-            console.print(
-                f"[green]✓[/] build {spec.id} ({rb.commit[:12]}): all llama-bench flags supported"
-            )
-        if ignored:
-            console.print(f"  [dim]not applicable to llama-bench: {', '.join(sorted(ignored))}[/]")
+        for tool, make in tools:
+            problems += _check_tool(rb, tool, make, variants)
 
     make_plan(exp)
     if problems:
         fail(f"{problems} problem(s) found", code=1)
     console.print("[green]valid[/]")
+
+
+def _check_tool(
+    rb: builds.ResolvedBuild,
+    tool: str,
+    make: Callable[[Path, LlamaConfig], Argv],
+    variants: list[LlamaConfig],
+) -> int:
+    try:
+        supported = binary_flags(rb.tool(tool))
+    except IntrospectionError as e:
+        console.print(f"[red]✗[/] build {rb.id}: {e}")
+        return 1
+    bad: set[str] = set()
+    ignored: set[str] = set()
+    for cfg in variants:
+        argv = make(rb.tool(tool), cfg)
+        bad |= set(unknown_flags(argv.args, supported))
+        ignored |= set(argv.ignored)
+    if bad:
+        console.print(
+            f"[red]✗[/] build {rb.id} ({rb.commit[:12]}) {tool} lacks: {', '.join(sorted(bad))}"
+        )
+    else:
+        console.print(f"[green]✓[/] build {rb.id} ({rb.commit[:12]}): all {tool} flags supported")
+    if ignored:
+        console.print(f"  [dim]not applicable to {tool}: {', '.join(sorted(ignored))}[/]")
+    return 1 if bad else 0

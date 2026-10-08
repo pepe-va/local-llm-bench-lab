@@ -4,7 +4,7 @@ import csv
 import json
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from llmbench.results.models import RunRecord
 from llmbench.results.store import Store
@@ -48,6 +48,73 @@ def append_jsonl(path: Path, run: RunRecord) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(asdict(run), default=str) + "\n")
+
+
+LATENCY_METRICS = [
+    "requests",
+    "requests_failed",
+    "ttft_ms_p50",
+    "ttft_ms_p95",
+    "e2e_ms_p50",
+    "e2e_ms_p95",
+    "itl_ms_p50",
+    "itl_ms_p95",
+    "prompt_tps_mean",
+    "gen_tps_mean",
+    "gen_tps_p50",
+    "prompt_tokens_total",
+    "gen_tokens_total",
+    "server_load_s",
+    "server_peak_rss_mb",
+    "spec_acceptance",
+]
+LATENCY_COLUMNS = [
+    "experiment",
+    "status",
+    "model_id",
+    "model_quant",
+    "build_id",
+    "build_commit",
+    "suite",
+    "variant",
+    *LATENCY_METRICS,
+    "temp_peak_c",
+    "started_at",
+    "fingerprint",
+    "error",
+]
+
+
+def write_latency_csv(path: Path, store: Store, experiment: str) -> int:
+    rows = store.latency_rows(experiment)
+    if not rows:
+        return 0
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=LATENCY_COLUMNS)
+        w.writeheader()
+        for r in rows:
+            model: dict[str, Any] = json.loads(r["model"])
+            tel: dict[str, Any] = json.loads(r["telemetry"]) if r["telemetry"] else {}
+            variant = json.loads(r["variant"])
+            w.writerow(
+                {
+                    "experiment": r["experiment"],
+                    "status": r["status"],
+                    "model_id": r["model_id"],
+                    "model_quant": cast(dict[str, Any], model.get("gguf") or {}).get("quant"),
+                    "build_id": r["build_id"],
+                    "build_commit": r["build_commit"],
+                    "suite": r["suite"],
+                    "variant": ";".join(f"{k}={v}" for k, v in variant.items()),
+                    **{m: _round(r.get(f"m.{m}"), 3) for m in LATENCY_METRICS},
+                    "temp_peak_c": tel.get("temp_peak_c"),
+                    "started_at": r["started_at"],
+                    "fingerprint": r["fingerprint"][:12],
+                    "error": (r["error"] or "").splitlines()[0] if r["error"] else "",
+                }
+            )
+    return len(rows)
 
 
 def write_csv(path: Path, store: Store, experiment: str) -> int:

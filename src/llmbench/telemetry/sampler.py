@@ -48,6 +48,10 @@ class Sampler:
         self._t0 = 0.0
         self._before: tuple[float | None, float, int | None] = (None, 0.0, None)
 
+    @property
+    def started(self) -> bool:
+        return self._thread is not None
+
     def attach(self, pid: int) -> None:
         self._pid = pid
 

@@ -11,6 +11,7 @@ from ruamel.yaml.comments import CommentedMap, CommentedSeq
 from ruamel.yaml.error import YAMLError
 
 from llmbench.config.experiment import Experiment
+from llmbench.config.suite import Suite
 
 _ENV = re.compile(r"\$\{env:([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}")
 
@@ -23,9 +24,12 @@ def load_experiment(path: Path) -> Experiment:
     path = path.expanduser().resolve()
     raw, root_doc = _load_tree(path, stack=())
     try:
-        return Experiment.model_validate(_interpolate(raw))
+        exp = Experiment.model_validate(_interpolate(raw))
     except ValidationError as e:
         raise ConfigError(_format_errors(e, path, root_doc)) from None
+    for suite in exp.phases.latency.suites if exp.phases.latency.enabled else []:
+        load_suite(suite)  # fail early on a broken suite
+    return exp
 
 
 def _read(path: Path) -> CommentedMap:
@@ -60,7 +64,43 @@ def _load_tree(path: Path, stack: tuple[Path, ...]) -> tuple[dict[str, Any], Com
         merged = deep_merge(merged, base_data)
     own = _plain(doc)
     own.pop("extends", None)
+    _anchor_paths(own, path.parent)
     return deep_merge(merged, own), doc
+
+
+def _anchor_paths(data: dict[str, Any], base: Path) -> None:
+    """Make file references relative to the YAML that declares them (also through `extends`)."""
+    latency = _node(data, "phases", "latency")
+    suites = latency.get("suites") if latency is not None else None
+    if latency is not None and isinstance(suites, list):
+        latency["suites"] = [_anchored(str(s), base) for s in cast(list[Any], suites)]
+
+
+def _node(data: dict[str, Any], *keys: str) -> dict[str, Any] | None:
+    node: Any = data
+    for k in keys:
+        if not isinstance(node, dict):
+            return None
+        node = cast(dict[str, Any], node).get(k)
+    return cast(dict[str, Any], node) if isinstance(node, dict) else None
+
+
+def _anchored(value: str, base: Path) -> str:
+    p = Path(value).expanduser()
+    return value if p.is_absolute() else str(base / p)
+
+
+def load_suite(path: Path) -> Suite:
+    path = path.expanduser().resolve()
+    doc = _plain(_read(path))
+    synthetic = _node(doc, "source", "synthetic")
+    corpus = synthetic.get("corpus") if synthetic is not None else None
+    if synthetic is not None and isinstance(corpus, str) and corpus != "words":
+        synthetic["corpus"] = _anchored(corpus, path.parent)
+    try:
+        return Suite.model_validate(_interpolate(doc))
+    except ValidationError as e:
+        raise ConfigError(_format_errors(e, path, _read(path))) from None
 
 
 def deep_merge(base: dict[str, Any], over: dict[str, Any]) -> dict[str, Any]:

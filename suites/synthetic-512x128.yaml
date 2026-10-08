@@ -1,0 +1,11 @@
+# Fixed-shape synthetic load: 512 prompt tokens in, 128 tokens out, exact for every model.
+# Comparable across models and configs because each request costs the same work.
+version: 1
+name: synthetic-512x128
+description: 512 prompt tokens, 128 generated tokens (EOS ignored).
+source:
+  synthetic:
+    prompt_tokens: 512
+    output_tokens: 128
+    count: 20
+    seed: 42

@@ -52,7 +52,7 @@ def test_validate_and_plan(tmp_path: Path, fake_bin_dir: Path, tiny_model: Path)
 
     r = runner.invoke(app, ["plan", str(exp)])
     assert r.exit_code == 0, out(r)
-    assert "Total timed executions" in out(r)
+    assert "total timed executions" in out(r)
     assert "48" in out(r)  # 4 variants x 4 tests x 3 repetitions
 
 
@@ -176,3 +176,90 @@ def test_models_cli(tmp_path: Path, hub: FakeHub) -> None:
     r = runner.invoke(app, ["models", "pull", "hf://unsloth/Qwen3-1.7B-GGUF:Q9_X"])
     assert r.exit_code == 1
     assert "no GGUF matches" in out(r)
+
+
+# -- latency phase (fake llama-server) ------------------------------------------------------
+
+
+def latency_experiment(tmp_path: Path, bin_dir: Path, model: Path, extra: str = "") -> Path:
+    (tmp_path / "suites").mkdir(exist_ok=True)
+    (tmp_path / "suites" / "syn.yaml").write_text(
+        "name: syn\nsource:\n  synthetic: {prompt_tokens: {dist: uniform, min: 20, max: 90},"
+        " output_tokens: 6, count: 4}\n"
+    )
+    p = tmp_path / "lat.yaml"
+    p.write_text(
+        f"""
+version: 1
+experiment: {{name: lat}}
+llama_cpp: {{builds: [{{id: fake, bin_dir: {bin_dir}}}]}}
+models: [{{id: tiny, source: {model}}}]
+matrix:
+  load.threads: [1, 2]
+  sampling.temperature: [0, 0.7]
+phases:
+  bench: {{enabled: false}}
+  latency: {{enabled: true, suites: [suites/syn.yaml], passes: 2, warmup_requests: 1}}
+hardware: {{cooldown: {{enabled: false}}, telemetry: {{hz: 20, sources: [linux]}}}}
+output: {{directory: {tmp_path / "out"}}}
+{extra}"""
+    )
+    return p
+
+
+def test_latency_run_reuses_servers_and_records_requests(
+    tmp_path: Path, fake_bin_dir: Path, tiny_model: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    starts = tmp_path / "starts.txt"
+    monkeypatch.setenv("FAKE_SERVER_STARTS", str(starts))
+    exp = latency_experiment(tmp_path, fake_bin_dir, tiny_model)
+
+    r = runner.invoke(app, ["plan", str(exp)])
+    assert "llama-server starts 2" in out(r)
+    assert "timed requests 32" in out(r)
+
+    r = runner.invoke(app, ["run", "-y", str(exp)])
+    assert r.exit_code == 0, out(r)
+    assert "4 completed, 0 failed" in out(r)
+    assert "TTFT p50" in out(r)
+    assert len(starts.read_text().splitlines()) == 2  # temperature variants reuse the server
+    assert all("--host 127.0.0.1" in line for line in starts.read_text().splitlines())
+
+    db = sqlite3.connect(tmp_path / "out" / "benchmark.sqlite")
+    assert db.execute("SELECT COUNT(*) FROM requests").fetchone()[0] == 4 * 4 * 2
+    assert db.execute("SELECT COUNT(*) FROM requests WHERE cache_n != 0").fetchone()[0] == 0
+    prompt_ns = {n for (n,) in db.execute("SELECT prompt_n FROM requests")}
+    assert all(20 <= n <= 90 for n in prompt_ns)  # exact synthetic sizes, BOS included
+    rows = list(csv.DictReader((tmp_path / "out" / "latency.csv").open()))
+    assert len(rows) == 4
+    assert float(rows[0]["ttft_ms_p50"]) > 0
+    assert rows[0]["requests"] == "8.0"
+
+    r = runner.invoke(app, ["run", "-y", "--resume", str(exp)])
+    assert "0 completed, 0 failed, 4 skipped" in out(r)
+    assert len(starts.read_text().splitlines()) == 2  # nothing restarted
+
+
+def test_server_start_failure_is_recorded_once_per_server(
+    tmp_path: Path, fake_bin_dir: Path, tiny_model: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    starts = tmp_path / "starts.txt"
+    monkeypatch.setenv("FAKE_SERVER_STARTS", str(starts))
+    monkeypatch.setenv("FAKE_SERVER_FAIL_START", "1")
+    r = runner.invoke(
+        app, ["run", "-y", str(latency_experiment(tmp_path, fake_bin_dir, tiny_model))]
+    )
+    assert r.exit_code == 1
+    assert "0 completed, 4 failed" in out(r)
+    assert "tensor data is not within file bounds" in out(r)
+    assert len(starts.read_text().splitlines()) == 2  # one attempt per server key, no retries
+
+
+def test_validate_checks_server_flags(tmp_path: Path, fake_bin_dir: Path, tiny_model: Path) -> None:
+    exp = latency_experiment(
+        tmp_path, fake_bin_dir, tiny_model, "defaults: {extra_args: {server: [--draft-max, '8']}}"
+    )
+    r = runner.invoke(app, ["validate", str(exp)])
+    assert r.exit_code == 1
+    assert "llama-server lacks: --draft-max" in out(r)
+    assert "suite syn" in out(r)
