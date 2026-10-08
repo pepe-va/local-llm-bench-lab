@@ -93,7 +93,8 @@ def pick_files(listing: RepoListing, ref: HfRef) -> list[RemoteFile]:
         if f.name.endswith(".gguf") and not f.name.rsplit("/", 1)[-1].startswith("mmproj")
     ]
     if ref.file is not None:
-        hit = [f for f in ggufs if f.name == ref.file]
+        # an explicit path may name any GGUF, including a multimodal projector (mmproj)
+        hit = [f for f in listing.files if f.name == ref.file and f.name.endswith(".gguf")]
         if not hit:
             raise ModelNotFoundError(
                 f"{ref}: no file {ref.file!r} in {ref.repo}@{listing.commit[:12]}"
@@ -115,7 +116,8 @@ def pick_files(listing: RepoListing, ref: HfRef) -> list[RemoteFile]:
             f"{ref} is ambiguous; pick one with hf://{ref.repo}/<file>:\n  {names}"
         )
     key, _ = next(iter(groups.items()))
-    files = sorted(_groups(ggufs)[key], key=lambda f: f.name)
+    universe = [f for f in listing.files if f.name.endswith(".gguf")] if ref.file else ggufs
+    files = sorted(_groups(universe)[key], key=lambda f: f.name)
     first = shard_info(files[0].name)
     if first is not None and len(files) != first[2]:
         raise ModelNotFoundError(
