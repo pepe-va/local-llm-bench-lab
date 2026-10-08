@@ -8,9 +8,10 @@ Reproducible benchmarking lab for local LLMs on [llama.cpp](https://github.com/g
 - **Two measurement phases**: `bench` (llama-bench, engine throughput) and `latency` (llama-server: TTFT, inter-token latency, end-to-end, with synthetic prompts of exact token counts). Every llama.cpp knob is configurable, including RoPE/YaRN, speculative decoding, server options and sampling.
 - **Hardware telemetry**: temperature, throttling, exact peak RAM, CPU frequency, and temperature-based cooldown.
 - **Reproducible results** in SQLite, with fingerprints for `--resume`, plus CSV and JSONL exports.
-- Planned: HF datasets and file-based quality suites with evaluators, HTML/Markdown/PNG reports, pass/fail gates, and embeddings/rerank/vision. See the [roadmap](docs/PLAN.md#roadmap-de-implementación).
+- **Quality suites**: own prompts (a Spanish writing suite is included), files or Hugging Face datasets, scored by deterministic evaluators (exact, contains, regex, numeric extraction, length, JSON schema, composites).
+- Planned: HTML/Markdown/PNG reports, pass/fail gates, and embeddings/rerank/vision. See the [roadmap](docs/PLAN.md#roadmap-de-implementación).
 
-> Status: **v0.4.0** (Phase 3, llama-server and synthetic data). See [CHANGELOG](CHANGELOG.md).
+> Status: **v0.5.0** (Phase 4, quality). See [CHANGELOG](CHANGELOG.md).
 
 ## Quick start
 

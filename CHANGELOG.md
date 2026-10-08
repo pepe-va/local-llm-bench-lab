@@ -5,6 +5,26 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-08
+
+Phase 4: quality.
+
+### Added
+
+- `phases.quality`: every response is scored by its evaluator. Latency metrics are recorded too, and quality runs share llama-server processes with latency runs.
+- Suite sources `items` (inline), `file` (jsonl, json, csv, parquet) and `hf_dataset` (read from the Hub's `refs/convert/parquet` branch with a pinned commit, `limit` and `shuffle_seed`; needs the `hf-datasets` extra). Suites also gain `columns` mapping, a `template`, a default `system` prompt and `max_tokens` (ADR-0014).
+- `chat` endpoint (`/v1/chat/completions` streaming, with server `timings`; reasoning text kept separately).
+- Deterministic evaluators `exact`, `contains`, `not_contains`, `regex`, `regex_extract` (numeric or exact, with an optional reference pattern), `length` (absolute or ratio to the input or reference) and `json_schema`; composites `all`, `any` and `weighted`. `llm_judge` parts never affect objective scores and are marked pending for the judge pass (ADR-0015).
+- Per-request prompt, response, reasoning, category, score, pass and failure detail. Per-run `score_mean`, `pass_rate`, per-category scores, and words and chars per second. New `quality.csv`.
+- Dataset provenance (repo, config, split, commit, rows) stored with every run. The digest of the materialized requests enters the fingerprint.
+- Suites `es-writing` (11 controlled Spanish writing tasks: correction, rewriting, clarity, summary, reduction, style, constraints, no invented facts) and `hf-gsm8k`, plus the `quality-es` experiment.
+- Database migration 0003.
+
+### Changed
+
+- `phases/latency.py` becomes `phases/suites.py`, shared by the latency and quality phases. `LatencyPhase` and `QualityPhase` derive from `SuitePhase`.
+- The `hf-datasets` extra now installs `pyarrow` instead of `datasets`. `jsonschema` is a core dependency.
+
 ## [0.4.0] - 2026-10-08
 
 Phase 3: llama-server and synthetic data.
@@ -91,7 +111,8 @@ Phase 0: project skeleton.
 - ruff, basedpyright (strict), pytest, pre-commit, and GitHub Actions on x86_64 and arm64.
 - Project proposal (`docs/PRD.md`) and plan (`docs/PLAN.md`).
 
-[Unreleased]: https://github.com/OWNER/local-llm-bench-lab/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/OWNER/local-llm-bench-lab/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/OWNER/local-llm-bench-lab/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/OWNER/local-llm-bench-lab/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/OWNER/local-llm-bench-lab/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/OWNER/local-llm-bench-lab/compare/v0.1.0...v0.2.0
