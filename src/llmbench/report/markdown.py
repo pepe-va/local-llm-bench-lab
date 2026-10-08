@@ -15,6 +15,10 @@ def _fmt(v: Any, digits: int = 1) -> str:
     return str(v)
 
 
+def _ci(low: float | None, high: float | None) -> str:
+    return f"[{low:.2f}, {high:.2f}]" if low is not None and high is not None else "-"
+
+
 def _table(headers: list[str], rows: list[list[str]]) -> str:
     out = ["| " + " | ".join(headers) + " |", "|" + "---|" * len(headers)]
     out += ["| " + " | ".join(c.replace("|", "\\|") for c in r) + " |" for r in rows]
@@ -23,10 +27,12 @@ def _table(headers: list[str], rows: list[list[str]]) -> str:
 
 def bench_table(d: ReportData) -> str:
     return _table(
-        ["model", "quant", "build", "variant", "test", "t/s", "±", "cv", "unstable", "peak RSS MB"],
+        ["model", "quant", "build", "variant", "test", "t/s", "±", "95% CI", "median", "IQR", "cv",
+         "unstable", "peak RSS MB"],
         [
             [r["model"], _fmt(r["quant"]), r["build"], r["variant"], r["test"], _fmt(r["tps"], 2),
-             _fmt(r["stddev"], 2), f"{r['cv']:.1%}", _fmt(r["unstable"]), _fmt(r["rss_mb"], 0)]
+             _fmt(r["stddev"], 2), _ci(r["ci_low"], r["ci_high"]), _fmt(r["median"], 2),
+             _fmt(r["iqr"], 2), f"{r['cv']:.1%}", _fmt(r["unstable"]), _fmt(r["rss_mb"], 0)]
             for r in d.bench
         ],
     )  # fmt: skip

@@ -25,6 +25,10 @@ class Measurement:
     median_ts: float = 0.0
     cv: float = 0.0
     unstable: bool = False
+    iqr_ts: float | None = None
+    ci_low_ts: float | None = None
+    """Bounds of the 95 % bootstrap CI of `avg_ts`; None with fewer than 2 samples."""
+    ci_high_ts: float | None = None
 
     @property
     def label(self) -> str:

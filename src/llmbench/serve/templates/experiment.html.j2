@@ -33,8 +33,8 @@
 {% if d.bench %}
 <h2>Bench</h2>
 <div class="wrap"><table>
-  <tr><th>model</th><th>quant</th><th>variant</th><th>test</th><th>t/s</th><th>±</th><th>cv</th><th>peak RSS MB</th><th>temp peak</th></tr>
-  {% for r in d.bench %}<tr><td>{{ r.model }}</td><td>{{ r.quant | fmt }}</td><td>{{ r.variant }}</td><td>{{ r.test }}</td><td class="num">{{ r.tps | fmt(2) }}</td><td class="num">{{ r.stddev | fmt(2) }}</td><td class="num {{ 'ko' if r.unstable else '' }}">{{ r.cv | pct }}</td><td class="num">{{ r.rss_mb | fmt(0) }}</td><td class="num">{{ r.temp_peak | fmt }}</td></tr>{% endfor %}
+  <tr><th>model</th><th>quant</th><th>variant</th><th>test</th><th>t/s</th><th>±</th><th>95% CI</th><th>median</th><th>IQR</th><th>cv</th><th>peak RSS MB</th><th>temp peak</th></tr>
+  {% for r in d.bench %}<tr><td>{{ r.model }}</td><td>{{ r.quant | fmt }}</td><td>{{ r.variant }}</td><td>{{ r.test }}</td><td class="num">{{ r.tps | fmt(2) }}</td><td class="num">{{ r.stddev | fmt(2) }}</td><td class="num">{% if r.ci_low is not none %}[{{ r.ci_low | fmt(2) }}, {{ r.ci_high | fmt(2) }}]{% else %}-{% endif %}</td><td class="num">{{ r.median | fmt(2) }}</td><td class="num">{{ r.iqr | fmt(2) }}</td><td class="num {{ 'ko' if r.unstable else '' }}">{{ r.cv | pct }}</td><td class="num">{{ r.rss_mb | fmt(0) }}</td><td class="num">{{ r.temp_peak | fmt }}</td></tr>{% endfor %}
 </table></div>
 {% endif %}
 

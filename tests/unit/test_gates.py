@@ -94,7 +94,10 @@ def record(fp: str, variant: dict[str, Any], phase: str, **kw: Any) -> RunRecord
 @pytest.fixture
 def store(tmp_path: Path) -> Store:
     s = Store(tmp_path / "benchmark.sqlite")
-    m = Measurement("tg", 0, 128, 0, 9.5, 0.2, 1, 1, [9.4, 9.6], {}, 9.5, 0.02, False)
+    m = Measurement(
+        "tg", 0, 128, 0, 9.5, 0.2, 1, 1, [9.4, 9.6], {}, 9.5, 0.02, False,
+        iqr_ts=0.1, ci_low_ts=9.4, ci_high_ts=9.6,
+    )  # fmt: skip
     for threads in (2, 4):
         # the planner keeps the first variant of each bench-identical group
         bench_variant = {"load.threads": threads, "sampling.temperature": 0}
@@ -116,6 +119,7 @@ def test_view_shares_bench_results_with_sampling_variants(store: Store) -> None:
         for r in build_view(store, "exp")
     }
     assert rows[(2, 0.7)].metric("tps:tg128") == 9.5  # bench ran once for threads=2
+    assert rows[(2, 0.7)].metric("tps_ci_low:tg128") == 9.4
     assert rows[(2, 0.7)].metric("ttft_ms_p95@syn") == 200
     assert rows[(4, 0)].metric("peak_rss_mb", "max") == 900
 
@@ -134,6 +138,7 @@ def test_reports_and_guidance(store: Store, tmp_path: Path) -> None:
     md = render_markdown(d)
     assert "## Gates" in md
     assert "| m | Q4_K_M |" in md
+    assert "| 9.50 | 0.20 | [9.40, 9.60] | 9.50 | 0.10 |" in md
     guidance = render_guidance(d)
     assert "**2 of 4** configurations pass" in guidance
     assert "127.0.0.1" in guidance
@@ -142,6 +147,8 @@ def test_reports_and_guidance(store: Store, tmp_path: Path) -> None:
     assert "Plotly" in html  # library embedded: works offline
     assert "Time to first token" in html
     assert html.count("<table") >= 2
+    assert "[9.40, 9.60]" in html
+    assert "whiskers: 95% CI" in html
     pngs = render_png(d, tmp_path / "charts")
     assert {p.name for p in pngs} == {"bench.png", "latency.png"}
     assert all(p.stat().st_size > 1000 for p in pngs)

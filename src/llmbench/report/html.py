@@ -23,6 +23,11 @@ def _need(module: str) -> Any:
         ) from None
 
 
+def _gap(low: float | None, high: float | None) -> float:
+    """Whisker length; none when the CI is unknown (a single repetition)."""
+    return high - low if low is not None and high is not None else 0.0
+
+
 def charts(d: ReportData) -> list[tuple[str, Any]]:
     """(title, plotly figure) pairs; empty sections are skipped."""
     go = _need("plotly.graph_objects")
@@ -35,9 +40,13 @@ def charts(d: ReportData) -> list[tuple[str, Any]]:
                 name=test,
                 x=[r["config"] for r in rows],
                 y=[r["tps"] for r in rows],
-                error_y={"type": "data", "array": [r["stddev"] for r in rows]},
-            )
-        fig.update_layout(barmode="group", yaxis_title="tokens/s", xaxis_tickangle=-20)
+                error_y={"type": "data", "symmetric": False,
+                         "array": [_gap(r["tps"], r["ci_high"]) for r in rows],
+                         "arrayminus": [_gap(r["ci_low"], r["tps"]) for r in rows]},
+            )  # fmt: skip
+        fig.update_layout(
+            barmode="group", yaxis_title="tokens/s (whiskers: 95% CI)", xaxis_tickangle=-20
+        )
         figs.append(("llama-bench throughput", fig))
     if d.latency:
         fig = go.Figure()

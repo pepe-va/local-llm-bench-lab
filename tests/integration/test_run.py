@@ -77,6 +77,7 @@ def test_run_records_failures_and_resumes(
     assert r.exit_code == 1, out(r)
     assert "2 completed, 2 failed" in out(r)
     assert "does not divide n_embd_head_k" in out(r)
+    assert "95% CI [" in out(r)
 
     out_dir = tmp_path / "out"
     db = sqlite3.connect(out_dir / "benchmark.sqlite")
@@ -92,6 +93,7 @@ def test_run_records_failures_and_resumes(
     assert {r["test"] for r in rows if r["status"] == "completed"} == {
         "pp64", "tg16", "pp64@d32", "tg16@d32",
     }  # fmt: skip
+    assert all(r["ci_low_ts"] and r["iqr_ts"] for r in rows if r["status"] == "completed")
     assert len((out_dir / "runs.jsonl").read_text().splitlines()) == 4
 
     r = runner.invoke(app, ["run", "-y", "--resume", str(exp)])

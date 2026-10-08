@@ -113,6 +113,8 @@ def _add_run(row: ConfigRow, run: dict[str, Any]) -> None:
     if run["phase"] == "bench":
         for m in run["measurements"]:
             row.add(f"tps:{m['label']}", m["avg_ts"])
+            row.add(f"tps_ci_low:{m['label']}", m["ci_low_ts"])
+            row.add(f"tps_ci_high:{m['label']}", m["ci_high_ts"])
         return
     for name, value in run["metrics"].items():
         row.add(name, value)

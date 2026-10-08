@@ -1,3 +1,4 @@
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -8,7 +9,7 @@ from llmbench.engine import planner
 from llmbench.engine.planner import fingerprint
 from llmbench.llamacpp.bench import parse_jsonl
 from llmbench.results.models import RunRecord
-from llmbench.results.stats import annotate, cv
+from llmbench.results.stats import annotate, bootstrap_ci, cv, iqr
 from llmbench.results.store import Store, migrations, sha256_file
 from tests.conftest import LLAMACPP
 
@@ -55,6 +56,36 @@ def test_cv_and_unstable_flag() -> None:
     assert annotate(m, unstable_cv=a.cv * 2, throttled=True).unstable
 
 
+def test_iqr_and_bootstrap_ci() -> None:
+    assert iqr([5.0]) is None
+    assert bootstrap_ci([5.0]) is None
+    assert iqr([10.0, 10.0, 10.0]) == 0
+    assert bootstrap_ci([10.0, 10.0, 10.0]) == (10.0, 10.0)
+    samples = [1.0, 2.0, 3.0, 4.0, 5.0]
+    assert iqr(samples) == 2
+    ci = bootstrap_ci(samples)
+    assert ci is not None
+    assert ci == bootstrap_ci(samples)  # seeded: the same samples give the same interval
+    assert min(samples) < ci[0] < 3 < ci[1] < max(samples)
+    wide = bootstrap_ci(samples, confidence=0.99)
+    assert wide is not None
+    assert wide[0] <= ci[0]
+    assert wide[1] >= ci[1]
+    # three repetitions cannot narrow it down: the interval spans every sample
+    assert bootstrap_ci([3.0, 1.0, 2.0]) == (1.0, 3.0)
+
+
+def test_annotate_adds_spread() -> None:
+    m = parse_jsonl((LLAMACPP / "llama-bench.jsonl").read_text())[0]
+    a = annotate(m, unstable_cv=0.05, throttled=False)
+    assert a.iqr_ts == iqr(m.samples_ts)
+    assert a.ci_low_ts is not None
+    assert a.ci_high_ts is not None
+    assert min(m.samples_ts) <= a.ci_low_ts <= a.avg_ts <= a.ci_high_ts <= max(m.samples_ts)
+    single = annotate(replace(m, samples_ts=[m.avg_ts]), unstable_cv=0.05, throttled=False)
+    assert (single.iqr_ts, single.ci_low_ts, single.ci_high_ts) == (None, None, None)
+
+
 def record(fingerprint: str, status: str = "completed") -> RunRecord:
     ms = [
         annotate(m, unstable_cv=0.1, throttled=False)
@@ -90,11 +121,30 @@ def test_store_roundtrip_and_resume(tmp_path: Path) -> None:
     rows = store.summary_rows("exp")
     assert len(rows) == 4  # latest attempt only, one row per measurement
     assert {r["label"] for r in rows} == {"pp64", "tg16", "pp64@d32", "tg16@d32"}
+    assert all(r["ci_low_ts"] <= r["avg_ts"] <= r["ci_high_ts"] for r in rows)
 
 
 def test_migrations_are_idempotent(tmp_path: Path) -> None:
     Store(tmp_path / "b.sqlite").close()
     assert Store(tmp_path / "b.sqlite").schema_version == LATEST
+
+
+def test_upgrade_fills_spread_from_stored_samples(tmp_path: Path) -> None:
+    path = tmp_path / "b.sqlite"
+    store = Store(path)
+    store.save_run(record("f1"))
+    spread = ("iqr_ts", "ci_low_ts", "ci_high_ts")
+    expected = [tuple(r[c] for c in spread) for r in store.summary_rows("exp")]
+    assert all(v is not None for row in expected for v in row)
+    # roll it back to schema 5, as written by llb 0.9
+    for column in spread:
+        store.db.execute(f"ALTER TABLE measurements DROP COLUMN {column}")
+    store.db.execute("PRAGMA user_version = 5")
+    store.close()
+
+    store = Store(path)
+    assert store.schema_version == LATEST
+    assert [tuple(r[c] for c in spread) for r in store.summary_rows("exp")] == expected
 
 
 def test_model_hash_cache(tmp_path: Path) -> None:

@@ -16,7 +16,10 @@ def results(tmp_path: Path) -> Path:
 
     out = tmp_path / "runs" / "exp"
     store = Store(out / "benchmark.sqlite")
-    m = Measurement("tg", 0, 128, 0, 9.5, 0.2, 1, 1, [9.4, 9.6], {}, 9.5, 0.02, False)
+    m = Measurement(
+        "tg", 0, 128, 0, 9.5, 0.2, 1, 1, [9.4, 9.6], {}, 9.5, 0.02, False,
+        iqr_ts=0.1, ci_low_ts=9.4, ci_high_ts=9.6,
+    )  # fmt: skip
     store.save_run(record("b", {"load.threads": 4}, "bench", measurements=[m]))
     store.save_run(
         record(
@@ -58,6 +61,7 @@ def test_experiment_runs_and_run_pages(client: TestClient) -> None:
     assert page.status_code == 200
     assert 'hx-trigger="load, every 3s"' in page.text  # live progress
     assert "/static/plotly.min.js" in page.text
+    assert "[9.40, 9.60]" in page.text
     partial = client.get(f"/e/{sid}/exp/runs")
     assert "tg128 9.5 t/s" in partial.text
     assert "score 0.500" in partial.text
@@ -65,6 +69,8 @@ def test_experiment_runs_and_run_pages(client: TestClient) -> None:
     detail = client.get(f"/run/{sid}/{runs[0]['id']}")
     assert detail.status_code == 200
     assert "Requests (1)" in detail.text
+    bench = next(r for r in runs if r["phase"] == "bench")
+    assert "[9.40, 9.60]" in client.get(f"/run/{sid}/{bench['id']}").text
     assert client.get(f"/api/run/{sid}/{runs[0]['id']}").json()["requests"][0]["content"] == "Hola"
 
 

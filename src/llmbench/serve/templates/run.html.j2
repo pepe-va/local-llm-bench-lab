@@ -9,8 +9,8 @@
 
 {% if run.measurements %}
 <h2>Measurements</h2>
-<div class="wrap"><table><tr><th>test</th><th>t/s</th><th>±</th><th>median</th><th>cv</th><th>unstable</th></tr>
-{% for m in run.measurements %}<tr><td>{{ m.label }}</td><td class="num">{{ m.avg_ts | fmt(2) }}</td><td class="num">{{ m.stddev_ts | fmt(2) }}</td><td class="num">{{ m.median_ts | fmt(2) }}</td><td class="num">{{ m.cv | pct }}</td><td>{{ 'yes' if m.unstable else '' }}</td></tr>{% endfor %}
+<div class="wrap"><table><tr><th>test</th><th>t/s</th><th>±</th><th>95% CI</th><th>median</th><th>IQR</th><th>cv</th><th>unstable</th></tr>
+{% for m in run.measurements %}<tr><td>{{ m.label }}</td><td class="num">{{ m.avg_ts | fmt(2) }}</td><td class="num">{{ m.stddev_ts | fmt(2) }}</td><td class="num">{% if m.ci_low_ts is not none %}[{{ m.ci_low_ts | fmt(2) }}, {{ m.ci_high_ts | fmt(2) }}]{% else %}-{% endif %}</td><td class="num">{{ m.median_ts | fmt(2) }}</td><td class="num">{{ m.iqr_ts | fmt(2) }}</td><td class="num">{{ m.cv | pct }}</td><td>{{ 'yes' if m.unstable else '' }}</td></tr>{% endfor %}
 </table></div>
 {% endif %}
 

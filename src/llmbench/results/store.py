@@ -9,9 +9,11 @@ from pathlib import Path
 from typing import Any
 
 from llmbench.results.models import RunRecord
+from llmbench.results.stats import bootstrap_ci, iqr
 from llmbench.telemetry.sampler import Sample
 
 _HASH_CHUNK = 8 * 1024 * 1024
+_SPREAD_MIGRATION = 6
 
 
 def migrations() -> list[tuple[int, str]]:
@@ -42,7 +44,22 @@ class Store:
             if version > current:
                 with self.db:
                     self.db.executescript(sql)
+                    if version == _SPREAD_MIGRATION:
+                        self._backfill_spread()
                     self.db.execute(f"PRAGMA user_version = {version}")
+
+    def _backfill_spread(self) -> None:
+        """IQR and CI for measurements saved before they existed, from their stored samples."""
+        rows = self.db.execute("SELECT rowid, samples_ts FROM measurements").fetchall()
+        updates: list[tuple[float | None, float | None, float | None, int]] = []
+        for rowid, raw in rows:
+            samples = [float(x) for x in json.loads(raw)]
+            ci = bootstrap_ci(samples)
+            updates.append((iqr(samples), ci[0] if ci else None, ci[1] if ci else None, rowid))
+        self.db.executemany(
+            "UPDATE measurements SET iqr_ts = ?, ci_low_ts = ?, ci_high_ts = ? WHERE rowid = ?",
+            updates,
+        )
 
     @property
     def schema_version(self) -> int:
@@ -99,8 +116,8 @@ class Store:
             self.db.executemany(
                 """INSERT INTO measurements (run_id, test, label, n_prompt, n_gen, n_depth,
                     avg_ts, stddev_ts, median_ts, cv, unstable, avg_ns, stddev_ns,
-                    samples_ts, raw)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    samples_ts, raw, iqr_ts, ci_low_ts, ci_high_ts)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 [
                     (
                         run_id,
@@ -118,6 +135,9 @@ class Store:
                         m.stddev_ns,
                         j(m.samples_ts),
                         j(m.raw),
+                        m.iqr_ts,
+                        m.ci_low_ts,
+                        m.ci_high_ts,
                     )
                     for m in run.measurements
                 ],
@@ -187,7 +207,8 @@ class Store:
                        SELECT MAX(id) FROM runs WHERE fingerprint = r.fingerprint)
                )
                SELECT l.*, m.test, m.label, m.n_prompt, m.n_gen, m.n_depth, m.avg_ts,
-                      m.stddev_ts, m.median_ts, m.cv, m.unstable
+                      m.stddev_ts, m.median_ts, m.cv, m.unstable, m.iqr_ts, m.ci_low_ts,
+                      m.ci_high_ts
                FROM latest l LEFT JOIN measurements m ON m.run_id = l.id
                ORDER BY l.id, m.rowid""",
             (experiment,),
@@ -237,8 +258,8 @@ class Store:
             r["measurements"] = [
                 dict(m)
                 for m in self.db.execute(
-                    "SELECT label, avg_ts, stddev_ts, median_ts, cv, unstable FROM measurements "
-                    "WHERE run_id = ?",
+                    "SELECT label, avg_ts, stddev_ts, median_ts, cv, unstable, iqr_ts, ci_low_ts, "
+                    "ci_high_ts FROM measurements WHERE run_id = ?",
                     (r["id"],),
                 )
             ]

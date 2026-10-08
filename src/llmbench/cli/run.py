@@ -102,8 +102,14 @@ class RichEvents:
             )
         for m in record.measurements:
             flag = " [yellow](unstable)[/]" if m.unstable else ""
+            ci = (
+                f"  95% CI [{m.ci_low_ts:.2f}, {m.ci_high_ts:.2f}]"
+                if m.ci_low_ts is not None and m.ci_high_ts is not None
+                else ""
+            )
             console.print(
-                f"  {m.label:<14} {m.avg_ts:10.2f} t/s ± {m.stddev_ts:.2f}  cv {m.cv:.1%}{flag}",
+                f"  {m.label:<14} {m.avg_ts:10.2f} t/s ± {m.stddev_ts:.2f}{ci}"
+                f"  cv {m.cv:.1%}{flag}",
                 highlight=False,
             )
         console.print(f"  [dim]{_telemetry_line(record)}[/]", highlight=False)

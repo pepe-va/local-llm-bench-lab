@@ -1,11 +1,17 @@
 """Descriptive statistics over per-repetition samples."""
 
 import json
+import random
 import statistics
 from dataclasses import replace
 
 from llmbench.evaluation.retrieval import pearson, spearman
 from llmbench.results.models import Measurement, RequestResult
+
+CONFIDENCE = 0.95
+BOOTSTRAP_RESAMPLES = 10_000
+_BOOTSTRAP_SEED = 0
+"""Fixed, so the same samples always give the same interval (ADR-0020)."""
 
 
 def cv(samples: list[float]) -> float:
@@ -16,11 +22,54 @@ def cv(samples: list[float]) -> float:
     return statistics.stdev(samples) / mean if mean else 0.0
 
 
+def iqr(samples: list[float]) -> float | None:
+    """Interquartile range (Q3 - Q1, inclusive quartiles); None for fewer than 2 samples."""
+    if len(samples) < 2:  # noqa: PLR2004
+        return None
+    q1, _, q3 = statistics.quantiles(samples, n=4, method="inclusive")
+    return q3 - q1
+
+
+def bootstrap_ci(
+    samples: list[float],
+    *,
+    confidence: float = CONFIDENCE,
+    resamples: int = BOOTSTRAP_RESAMPLES,
+) -> tuple[float, float] | None:
+    """Percentile-bootstrap confidence interval of the mean; None for fewer than 2 samples.
+
+    Seeded, hence reproducible. With a handful of repetitions it runs narrower than the
+    nominal confidence: read it as a guide for comparing configurations, not a guarantee.
+    """
+    n = len(samples)
+    if n < 2:  # noqa: PLR2004
+        return None
+    draws = random.Random(_BOOTSTRAP_SEED).choices(samples, k=n * resamples)
+    means = [statistics.fmean(draws[i : i + n]) for i in range(0, len(draws), n)]
+    tail = (1 - confidence) / 2 * 100
+    low, high = percentile(means, tail), percentile(means, 100 - tail)
+    assert low is not None
+    assert high is not None
+    return low, high
+
+
 def annotate(m: Measurement, *, unstable_cv: float, throttled: bool) -> Measurement:
-    """Add median, CV and the `unstable` flag. Unstable runs are kept, never hidden."""
+    """Add median, IQR, CV, the CI of the mean and the `unstable` flag.
+
+    Unstable runs are kept, never hidden.
+    """
     c = cv(m.samples_ts)
     median = statistics.median(m.samples_ts) if m.samples_ts else m.avg_ts
-    return replace(m, median_ts=median, cv=c, unstable=throttled or c > unstable_cv)
+    ci = bootstrap_ci(m.samples_ts)
+    return replace(
+        m,
+        median_ts=median,
+        iqr_ts=iqr(m.samples_ts),
+        ci_low_ts=ci[0] if ci else None,
+        ci_high_ts=ci[1] if ci else None,
+        cv=c,
+        unstable=throttled or c > unstable_cv,
+    )
 
 
 def percentile(values: list[float], q: float) -> float | None:
