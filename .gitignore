@@ -16,9 +16,9 @@ models/*
 *.gguf
 
 # Benchmark outputs (default lives in $LLB_HOME, these cover local overrides)
-results/
-reports/
-runs/
+/results/
+/reports/
+/runs/
 *.sqlite
 *.sqlite-*
 *.parquet
