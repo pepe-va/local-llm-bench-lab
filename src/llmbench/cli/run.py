@@ -1,15 +1,21 @@
+from pathlib import Path
 from typing import Annotated
 
 import typer
 
 from llmbench.cli.common import ExperimentArg, console, fail, load
 from llmbench.cli.plan import ModelOpt, print_plan
+from llmbench.config.experiment import Experiment
 from llmbench.config.matrix import variant_label
 from llmbench.engine.env import PreflightError
 from llmbench.engine.executor import execute
 from llmbench.engine.planner import RunSpec, make_plan
 from llmbench.engine.runtime import output_dir
+from llmbench.report.data import collect
+from llmbench.report.html import MissingExtraError
+from llmbench.report.write import write_guidance, write_reports
 from llmbench.results.models import RunRecord
+from llmbench.results.store import Store
 
 
 class RichEvents:
@@ -110,10 +116,35 @@ def run(
         + (" · [yellow]interrupted (use --resume)[/]" if s.interrupted else "")
     )
     console.print(f"results: {s.output_dir}")
+    gates_failed = _reports(exp, s.output_dir)
     if s.interrupted:
         raise typer.Exit(130)
-    if s.failed:
+    if s.failed or gates_failed:
         raise typer.Exit(1)
+
+
+def _reports(exp: Experiment, out: Path) -> bool:
+    """Write the configured reports and, with gates, guidance.md. True if no config passes."""
+    db = out / "benchmark.sqlite"
+    if not db.is_file():
+        return False
+    store = Store(db)
+    try:
+        d = collect(store, exp.experiment.name, exp.gates, exp.select)
+    finally:
+        store.close()
+    try:
+        for path in write_reports(d, out, exp.output.report):
+            console.print(f"report: {path}", highlight=False)
+    except MissingExtraError as e:
+        console.print(f"[yellow]report skipped[/]: {e}", highlight=False)
+    if not exp.gates:
+        return False
+    path = write_guidance(d, out)
+    passed = sum(1 for v in d.verdicts if v.passed)
+    winner = f" · winner: {d.winner.row.label}" if d.winner else ""
+    console.print(f"gates: {passed}/{len(d.verdicts)} configurations pass{winner} → {path}")
+    return passed == 0
 
 
 def _f(v: float | None, digits: int = 1) -> str:

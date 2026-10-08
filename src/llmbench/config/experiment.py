@@ -136,11 +136,38 @@ class Hardware(Strict):
     preflight: Preflight = Preflight()
 
 
+class Gate(Strict):
+    """A pass/fail threshold on one metric of a configuration (build x model x variant).
+
+    Metric names: `tps:<test>` (llama-bench, e.g. `tps:tg128`, `tps:pp512@d4096`); any run
+    metric of the server phases (`ttft_ms_p95`, `gen_tps_mean`, `score_mean`, `pass_rate`,
+    `judge.<criterion>`...), optionally restricted to one suite with `@<suite>`; and
+    `peak_rss_mb`, `temp_peak_c`, `throttled` (0/1).
+    """
+
+    metric: Annotated[str, Field(min_length=1)]
+    op: Literal[">=", "<=", ">", "<", "=="]
+    value: float
+    agg: Literal["mean", "median", "min", "max"] = "mean"
+    """How to combine several values of the metric (e.g. across suites or builds)."""
+
+
+class Select(Strict):
+    """How to pick the winning configuration in `llb guide`."""
+
+    metric: str
+    objective: Literal["maximize", "minimize"] = "maximize"
+    among: Literal["passed", "all"] = "passed"
+    agg: Literal["mean", "median", "min", "max"] = "mean"
+
+
 class Output(Strict):
     """Results always go to SQLite (needed for --resume); `formats` adds exports."""
 
     directory: Path | None = None
     formats: list[Literal["jsonl", "csv"]] = ["jsonl", "csv"]
+    report: list[Literal["html", "md", "png"]] = ["md"]
+    """Reports written at the end of `llb run` (html/png need the `report` extra)."""
 
 
 class Experiment(Strict):
@@ -153,6 +180,8 @@ class Experiment(Strict):
     phases: Phases = Phases()
     hardware: Hardware = Hardware()
     output: Output = Output()
+    gates: list[Gate] = []
+    select: Select | None = None
 
     @model_validator(mode="after")
     def _check(self) -> Self:

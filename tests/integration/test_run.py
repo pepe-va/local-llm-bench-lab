@@ -309,3 +309,38 @@ source:
     assert rows[2][:3] == ("q/ok#0", 1.0, 1)
     quality = list(csv.DictReader((tmp_path / "out" / "quality.csv").open()))
     assert quality[0]["score_mean:geo"] == "0.5"
+
+
+def test_gates_guide_and_reports(tmp_path: Path, fake_bin_dir: Path, tiny_model: Path) -> None:
+    exp = latency_experiment(
+        tmp_path,
+        fake_bin_dir,
+        tiny_model,
+        "gates:\n  - {metric: requests_failed, op: '==', value: 0}\n"
+        "  - {metric: 'ttft_ms_p50@syn', op: '<=', value: 10000}\n"
+        "select: {metric: gen_tps_mean}\noutput: {directory: OUT, report: [md, html]}\n",
+    )
+    exp.write_text(
+        exp.read_text()
+        .replace("output: {directory: " + str(tmp_path / "out") + "}\n", "")
+        .replace("OUT", str(tmp_path / "out"))
+    )
+    r = runner.invoke(app, ["run", "-y", str(exp)])
+    assert r.exit_code == 0, out(r)
+    assert "gates: 4/4 configurations pass · winner:" in out(r)
+    assert (tmp_path / "out" / "report.md").is_file()
+    assert (tmp_path / "out" / "report.html").is_file()
+    assert "llama-server" in (tmp_path / "out" / "guidance.md").read_text()
+
+    r = runner.invoke(app, ["guide", str(exp)])
+    assert r.exit_code == 0, out(r)
+    assert "winner:" in out(r)
+
+    exp.write_text(exp.read_text().replace("value: 10000", "value: 0"))
+    r = runner.invoke(app, ["guide", str(exp)])
+    assert r.exit_code == 1  # nothing passes
+    assert "None: no configuration passed" in (tmp_path / "out" / "guidance.md").read_text()
+
+    r = runner.invoke(app, ["report", str(tmp_path / "out"), "-f", "md", "-o", str(tmp_path / "r")])
+    assert r.exit_code == 0, out(r)
+    assert "## Latency (llama-server)" in (tmp_path / "r" / "report.md").read_text()

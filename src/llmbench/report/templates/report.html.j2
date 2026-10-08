@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ d.experiment }} · llb report</title>
+<style>
+  :root { --bg:#fff; --fg:#1d2330; --muted:#667085; --line:#e4e7ec; --card:#f8f9fb; --ok:#127a43; --ko:#b42318; --accent:#3559e0; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#111418; --fg:#e6e9ef; --muted:#98a2b3; --line:#2a2f37; --card:#181c22; --ok:#4ade80; --ko:#f87171; --accent:#7c9cff; } }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:24px 16px 64px; background:var(--bg); color:var(--fg); font:14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1200px; margin: 0 auto; }
+  h1 { margin: 0 0 4px; font-size: 26px; } h2 { margin-top: 36px; font-size: 19px; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+  .muted { color: var(--muted); }
+  .cards { display:grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin: 18px 0; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+  .card b { display:block; font-size: 22px; }
+  .wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+  th, td { padding: 7px 10px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+  th { position: sticky; top: 0; background: var(--card); font-weight: 600; cursor: pointer; }
+  td.num { text-align: right; }
+  tr:last-child td { border-bottom: none; }
+  .ok { color: var(--ok); font-weight: 600; } .ko { color: var(--ko); font-weight: 600; }
+  .winner { outline: 2px solid var(--accent); outline-offset: -2px; }
+  pre { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px; overflow-x: auto; }
+  input.filter { width: 100%; max-width: 420px; padding: 8px 10px; margin: 6px 0 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); }
+  .chart { background: #fff; border: 1px solid var(--line); border-radius: 10px; margin: 12px 0; padding: 4px; }
+</style>
+{% if plotly_library %}<script>{{ plotly_library | safe }}</script>{% endif %}
+</head>
+<body>
+<main>
+  <h1>{{ d.experiment }}</h1>
+  <div class="muted">llb {{ d.llb_version }} · generated {{ d.generated_at }}
+  {% if d.machine %} · {{ d.machine.cpu_model or d.machine.machine }} · {{ d.machine.os }} · {{ d.machine.cpu_count }} CPUs · {{ d.machine.ram_total_mb }} MB RAM · governor {{ d.machine.governor }}{% endif %}</div>
+
+  <div class="cards">
+    <div class="card"><b>{{ d.rows | length }}</b><span class="muted">configurations</span></div>
+    <div class="card"><b>{{ d.runs }}</b><span class="muted">runs</span></div>
+    <div class="card"><b>{{ d.failures | length }}</b><span class="muted">failed runs</span></div>
+    {% if d.verdicts %}<div class="card"><b>{{ d.verdicts | selectattr("passed") | list | length }} / {{ d.verdicts | length }}</b><span class="muted">pass all gates</span></div>{% endif %}
+  </div>
+
+  {% if d.verdicts %}
+  <h2>Gates</h2>
+  <ul>{% for g in d.gates %}<li><code>{{ g.metric }}</code> ({{ g.agg }}) {{ g.op }} {{ g.value }}</li>{% endfor %}</ul>
+  <div class="wrap"><table>
+    <tr><th></th><th>configuration</th><th>values</th><th>failed because</th></tr>
+    {% for v in d.verdicts %}
+    <tr class="{{ 'winner' if d.winner is sameas v else '' }}">
+      <td class="{{ 'ok' if v.passed else 'ko' }}">{{ '✓' if v.passed else '✗' }}{{ ' ★' if d.winner is sameas v else '' }}</td>
+      <td>{{ v.row.label }}</td>
+      <td>{% for c in v.checks %}{{ c.text }}<br>{% endfor %}</td>
+      <td>{{ v.reasons | join('; ') }}</td>
+    </tr>
+    {% endfor %}
+  </table></div>
+  {% if d.winner and d.deploy %}
+  <h3>Recommended: {{ d.winner.row.label }}</h3>
+  <pre>{{ d.deploy.command }}</pre>
+  {% endif %}
+  {% endif %}
+
+  {% for title, html in charts %}
+  <h2>{{ title }}</h2>
+  <div class="chart">{{ html | safe }}</div>
+  {% endfor %}
+
+  {% macro filtered(id) %}<input class="filter" placeholder="Filter rows (model, quant, threads, suite…)" oninput="filterTable('{{ id }}', this.value)">{% endmacro %}
+
+  {% if d.bench %}
+  <h2>Bench · llama-bench</h2>
+  {{ filtered('t-bench') }}
+  <div class="wrap"><table id="t-bench">
+    <tr><th>model</th><th>quant</th><th>build</th><th>variant</th><th>test</th><th>t/s</th><th>±</th><th>cv</th><th>unstable</th><th>peak RSS MB</th><th>temp peak °C</th></tr>
+    {% for r in d.bench %}
+    <tr><td>{{ r.model }}</td><td>{{ r.quant | fmt }}</td><td>{{ r.build }}</td><td>{{ r.variant }}</td><td>{{ r.test }}</td>
+      <td class="num">{{ r.tps | fmt(2) }}</td><td class="num">{{ r.stddev | fmt(2) }}</td><td class="num">{{ r.cv | pct }}</td>
+      <td class="{{ 'ko' if r.unstable else '' }}">{{ 'yes' if r.unstable else '' }}</td><td class="num">{{ r.rss_mb | fmt(0) }}</td><td class="num">{{ r.temp_peak | fmt }}</td></tr>
+    {% endfor %}
+  </table></div>
+  {% endif %}
+
+  {% if d.latency %}
+  <h2>Latency · llama-server</h2>
+  {{ filtered('t-latency') }}
+  <div class="wrap"><table id="t-latency">
+    <tr><th>model</th><th>quant</th><th>variant</th><th>suite</th><th>TTFT p50</th><th>TTFT p95</th><th>ITL p50</th><th>ITL p95</th><th>e2e p50</th><th>gen t/s</th><th>prompt t/s</th><th>server RSS MB</th><th>spec accept</th></tr>
+    {% for r in d.latency %}
+    <tr><td>{{ r.model }}</td><td>{{ r.quant | fmt }}</td><td>{{ r.variant }}</td><td>{{ r.suite }}</td>
+      <td class="num">{{ r.ttft_ms_p50 | fmt }}</td><td class="num">{{ r.ttft_ms_p95 | fmt }}</td><td class="num">{{ r.itl_ms_p50 | fmt(2) }}</td><td class="num">{{ r.itl_ms_p95 | fmt(2) }}</td>
+      <td class="num">{{ r.e2e_ms_p50 | fmt }}</td><td class="num">{{ r.gen_tps_mean | fmt }}</td><td class="num">{{ r.prompt_tps_mean | fmt }}</td><td class="num">{{ r.server_peak_rss_mb | fmt(0) }}</td><td class="num">{{ r.spec_acceptance | pct }}</td></tr>
+    {% endfor %}
+  </table></div>
+  {% endif %}
+
+  {% if d.quality %}
+  <h2>Quality</h2>
+  {{ filtered('t-quality') }}
+  <div class="wrap"><table id="t-quality">
+    <tr><th>model</th><th>quant</th><th>variant</th><th>suite</th><th>score</th><th>pass rate</th><th>scored</th><th>judge</th><th>gen t/s</th><th>words/s</th></tr>
+    {% for r in d.quality %}
+    <tr><td>{{ r.model }}</td><td>{{ r.quant | fmt }}</td><td>{{ r.variant }}</td><td>{{ r.suite }}</td>
+      <td class="num">{{ r.score_mean | fmt(3) }}</td><td class="num">{{ r.pass_rate | pct }}</td><td class="num">{{ r.scored | fmt(0) }}</td>
+      <td class="num">{{ r['judge.overall_mean'] | fmt(2) }}</td><td class="num">{{ r.gen_tps_mean | fmt }}</td><td class="num">{{ r.words_per_s_mean | fmt }}</td></tr>
+    {% endfor %}
+  </table></div>
+  {% endif %}
+
+  {% if d.failures %}
+  <h2>Failed runs</h2>
+  <div class="wrap"><table>
+    <tr><th>phase</th><th>configuration</th><th>suite</th><th>status</th><th>error</th></tr>
+    {% for f in d.failures %}<tr><td>{{ f.phase }}</td><td>{{ f.config }}</td><td>{{ f.suite | fmt }}</td><td class="ko">{{ f.status }}</td><td>{{ f.error }}</td></tr>{% endfor %}
+  </table></div>
+  {% endif %}
+</main>
+<script>
+function filterTable(id, q) {
+  q = q.toLowerCase();
+  const rows = document.getElementById(id).rows;
+  for (let i = 1; i < rows.length; i++) rows[i].style.display = rows[i].textContent.toLowerCase().includes(q) ? "" : "none";
+}
+document.querySelectorAll("table th").forEach((th) => th.addEventListener("click", () => {
+  const table = th.closest("table"), idx = [...th.parentNode.children].indexOf(th);
+  const rows = [...table.rows].slice(1), asc = th.dataset.asc !== "1";
+  const val = (r) => { const t = r.cells[idx]?.textContent.trim() ?? ""; const n = parseFloat(t); return isNaN(n) ? t : n; };
+  rows.sort((a, b) => (val(a) > val(b) ? 1 : -1) * (asc ? 1 : -1)).forEach((r) => table.tBodies[0].appendChild(r));
+  th.dataset.asc = asc ? "1" : "0";
+}));
+</script>
+</body>
+</html>

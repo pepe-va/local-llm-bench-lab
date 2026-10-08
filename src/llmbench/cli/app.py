@@ -9,6 +9,7 @@ from llmbench import __version__
 from llmbench.cli import llama, models
 from llmbench.cli.common import console
 from llmbench.cli.plan import plan
+from llmbench.cli.report import guide, report
 from llmbench.cli.run import run
 from llmbench.cli.validate import validate
 
@@ -21,6 +22,8 @@ app = typer.Typer(
 app.command()(validate)
 app.command()(plan)
 app.command()(run)
+app.command()(report)
+app.command()(guide)
 app.add_typer(llama.app, name="llama")
 app.add_typer(models.app, name="models")
 

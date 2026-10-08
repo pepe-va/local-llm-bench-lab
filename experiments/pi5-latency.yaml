@@ -27,3 +27,14 @@ phases:
     enabled: true
     suites: [../suites/synthetic-512x128.yaml, ../suites/synthetic-chat-mix.yaml]
     warmup_requests: 1
+
+# Acceptance criteria for an interactive assistant on the Pi (see `llb guide`).
+gates:
+  - { metric: "ttft_ms_p95@synthetic-512x128", op: "<=", value: 4000, agg: max }
+  - { metric: "gen_tps_mean@synthetic-chat-mix", op: ">=", value: 8 }
+  - { metric: peak_rss_mb, op: "<=", value: 6000, agg: max }
+  - { metric: temp_peak_c, op: "<=", value: 80, agg: max }
+  - { metric: throttled, op: "==", value: 0, agg: max }
+select: { metric: gen_tps_mean, objective: maximize }
+
+output: { report: [md, html] }

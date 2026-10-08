@@ -5,6 +5,7 @@ so the user sees exactly which knobs a tool did not receive.
 """
 
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -261,4 +262,48 @@ def server_argv(
         a += ["--lora-scaled", ",".join(f"{lo.path}:{lo.scale:g}" for lo in s.lora)]
 
     a += cfg.extra_args.server
+    return Argv(a, ignored)
+
+
+_SAMPLING_FLAGS = {
+    "temperature": "--temp",
+    "dynatemp_range": "--dynatemp-range",
+    "dynatemp_exponent": "--dynatemp-exp",
+    "top_k": "--top-k",
+    "top_p": "--top-p",
+    "min_p": "--min-p",
+    "typical_p": "--typical",
+    "top_n_sigma": "--top-nsigma",
+    "xtc_probability": "--xtc-probability",
+    "xtc_threshold": "--xtc-threshold",
+    "repeat_penalty": "--repeat-penalty",
+    "repeat_last_n": "--repeat-last-n",
+    "presence_penalty": "--presence-penalty",
+    "frequency_penalty": "--frequency-penalty",
+    "dry_multiplier": "--dry-multiplier",
+    "dry_base": "--dry-base",
+    "dry_allowed_length": "--dry-allowed-length",
+    "dry_penalty_last_n": "--dry-penalty-last-n",
+    "mirostat": "--mirostat",
+    "mirostat_tau": "--mirostat-ent",
+    "mirostat_eta": "--mirostat-lr",
+    "seed": "-s",
+}
+
+
+def sampling_flags(sampling: Mapping[str, object]) -> Argv:
+    """Sampling as server defaults (for deployment). Request-only fields are reported."""
+    a: list[str] = []
+    ignored: list[str] = []
+    for key, value in sampling.items():
+        if value is None:
+            continue
+        if key in _SAMPLING_FLAGS:
+            a += [_SAMPLING_FLAGS[key], str(value)]
+        elif key == "samplers" and isinstance(value, list):
+            a += ["--samplers", ";".join(str(v) for v in value)]  # pyright: ignore[reportUnknownVariableType, reportUnknownArgumentType]
+        elif key == "ignore_eos" and value is True:
+            a.append("--ignore-eos")
+        else:
+            ignored.append(f"sampling.{key}")
     return Argv(a, ignored)

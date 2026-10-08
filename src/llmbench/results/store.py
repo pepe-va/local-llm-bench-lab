@@ -208,6 +208,55 @@ class Store:
             out.append(row)
         return out
 
+    def experiments(self) -> list[str]:
+        return [r[0] for r in self.db.execute("SELECT DISTINCT experiment FROM runs ORDER BY 1")]
+
+    def latest_runs(self, experiment: str) -> list[dict[str, Any]]:
+        """Latest attempt per fingerprint, every phase, with metrics and measurements decoded."""
+        runs = [
+            dict(r)
+            for r in self.db.execute(
+                """SELECT * FROM runs r
+                   WHERE experiment = ? AND id = (
+                       SELECT MAX(id) FROM runs WHERE fingerprint = r.fingerprint)
+                   ORDER BY id""",
+                (experiment,),
+            )
+        ]
+        for r in runs:
+            for key in ("build", "model", "variant", "config", "argv", "telemetry"):
+                r[key] = json.loads(r[key]) if r[key] else None
+            r["metrics"] = dict(
+                self.db.execute("SELECT name, value FROM run_metrics WHERE run_id = ?", (r["id"],))
+            )
+            r["measurements"] = [
+                dict(m)
+                for m in self.db.execute(
+                    "SELECT label, avg_ts, stddev_ts, median_ts, cv, unstable FROM measurements "
+                    "WHERE run_id = ?",
+                    (r["id"],),
+                )
+            ]
+        return runs
+
+    def telemetry(self, run_id: int) -> list[dict[str, Any]]:
+        return [
+            dict(r)
+            for r in self.db.execute(
+                "SELECT t, temp_c, cpu_freq_mhz, ram_used_mb, proc_rss_mb FROM telemetry_samples "
+                "WHERE run_id = ? ORDER BY t",
+                (run_id,),
+            )
+        ]
+
+    def requests_of(self, run_id: int) -> list[dict[str, Any]]:
+        return [
+            dict(r)
+            for r in self.db.execute(
+                "SELECT * FROM requests WHERE run_id = ? ORDER BY idx", (run_id,)
+            )
+        ]
+
     # -- model hashes ------------------------------------------------------
 
     def remember_sha256(self, path: Path, digest: str) -> None:

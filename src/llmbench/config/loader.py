@@ -89,7 +89,7 @@ def _node(data: dict[str, Any], *keys: str) -> dict[str, Any] | None:
 
 def _anchored(value: str, base: Path) -> str:
     p = Path(value).expanduser()
-    return value if p.is_absolute() else str(base / p)
+    return value if p.is_absolute() else os.path.normpath(base / p)
 
 
 def load_suite(path: Path) -> Suite:
