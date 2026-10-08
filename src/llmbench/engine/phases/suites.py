@@ -24,7 +24,7 @@ from llmbench.llamacpp.client import LlamaClient
 from llmbench.llamacpp.introspect import binary_flags, unknown_flags
 from llmbench.llamacpp.server import LlamaServer, ServerError
 from llmbench.results.models import RequestResult, RunRecord, RunStatus
-from llmbench.results.stats import latency_metrics, quality_metrics
+from llmbench.results.stats import latency_metrics, quality_metrics, retrieval_metrics
 from llmbench.telemetry.cooldown import CooldownResult
 from llmbench.telemetry.sampler import Sampler, TelemetrySummary
 
@@ -126,6 +126,7 @@ def run_suite_spec(
     rb: ResolvedBuild,
     model: ModelHandle,
     draft: ModelHandle | None,
+    mmproj: ModelHandle | None = None,
     pool: ServerPool,
     index: int,
     total: int,
@@ -147,6 +148,7 @@ def run_suite_spec(
         build=rb.identity(),
         model_sha256=model.sha256,
         draft_sha256=draft.sha256 if draft else None,
+        mmproj_sha256=mmproj.sha256 if mmproj else None,
         config=spec.config,
         sampling=sampling,
         suite=spec.suite,
@@ -160,8 +162,15 @@ def run_suite_spec(
     binary = rb.tool("llama-server")
 
     def make_argv(port: int) -> Argv:
+        assert spec.suite is not None
         return server_argv(
-            binary, model.path, spec.config, port=port, draft_model=draft.path if draft else None
+            binary,
+            model.path,
+            spec.config,
+            port=port,
+            draft_model=draft.path if draft else None,
+            mmproj=mmproj.path if mmproj else None,
+            mode=spec.suite.server_mode,
         )
 
     out.argv = make_argv(0)
@@ -191,7 +200,9 @@ def run_suite_spec(
         phase=spec.phase,
         status=out.status,
         build={"id": rb.id, "ref": rb.ref, "version": rb.version, **rb.identity()},
-        model=model.info | ({"draft": draft.info} if draft else {}),
+        model=model.info
+        | ({"draft": draft.info} if draft else {})
+        | ({"mmproj": mmproj.info} if mmproj else {}),
         variant=spec.variant,
         config=spec.config.model_dump(mode="json") | {"effective_sampling": sampling},
         argv=out.argv.args,
@@ -241,18 +252,29 @@ def _measure(
             if materialized is not None
             else pool.synthetic_requests(spec.suite_path, spec.suite)
         )
+
+        def send(req: Request) -> RequestResult:
+            if endpoint == "embeddings":
+                return client.embed(req)
+            if endpoint == "rerank":
+                return client.rerank(req, k=suite.k)
+            return client.complete(req, sampling, endpoint=endpoint)
+
+        suite = spec.suite
         for req in requests[: phase.warmup_requests]:
-            client.complete(req, sampling, endpoint=endpoint)  # not recorded
+            send(req)  # not recorded
         before = server.metrics()
         for p in range(phase.passes):
             for req in requests:
-                r = client.complete(req, sampling, endpoint=endpoint)
-                if spec.phase == "quality":
+                r = send(req)
+                if spec.phase == "quality" and endpoint in ("completion", "chat"):
                     r = _scored(r, req)
                 out.results.append(replace(r, id=f"{r.id}#{p}"))
         after = server.metrics()
         out.metrics = latency_metrics(out.results) | _server_metrics(server, before, after, fresh)
-        if spec.phase == "quality":
+        if endpoint in ("embeddings", "rerank"):
+            out.metrics |= retrieval_metrics(out.results, endpoint, suite.k)
+        elif spec.phase == "quality":
             out.metrics |= quality_metrics(out.results)
         failed = [r for r in out.results if not r.ok]
         if failed or not out.results:

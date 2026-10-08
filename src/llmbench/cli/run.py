@@ -41,7 +41,9 @@ class RichEvents:
             for line in lines[1:3]:
                 console.print(f"    [dim]{line}[/]", highlight=False)
             return
-        if record.phase == "quality":
+        if record.phase == "quality" and (
+            record.metrics.get("scored") or record.metrics.get("judge_pending")
+        ):
             m = record.metrics
             cats = [
                 f"{k.split(':', 1)[1]} {v:.2f}"
@@ -60,8 +62,22 @@ class RichEvents:
             )
             if cats:
                 console.print(f"  [dim]{' · '.join(cats)}[/]", highlight=False)
-        if record.phase in ("latency", "quality"):
-            m = record.metrics
+        m = record.metrics
+        if m.get("spearman") is not None or m.get("cosine_mean") is not None:
+            console.print(
+                f"  spearman {_f(m.get('spearman'), 3)} · pearson {_f(m.get('pearson'), 3)}"
+                f" · {_f(m.get('embed_tps_mean'))} tokens/s embedded",
+                highlight=False,
+            )
+        ndcg = next((v for k, v in m.items() if k.startswith("ndcg@")), None)
+        if ndcg is not None:
+            console.print(
+                f"  nDCG {_f(ndcg, 3)} · MRR {_f(m.get('mrr'), 3)}"
+                f" · top-1 {_pct(m.get('top1_accuracy'))}"
+                f" · {_f(m.get('rerank_tps_mean'))} tokens/s",
+                highlight=False,
+            )
+        if record.phase in ("latency", "quality") and m.get("ttft_ms_p50") is not None:
             console.print(
                 f"  TTFT p50 {_f(m.get('ttft_ms_p50'))} ms · p95 {_f(m.get('ttft_ms_p95'))} ms"
                 f"   ITL p50 {_f(m.get('itl_ms_p50'))} ms · p95 {_f(m.get('itl_ms_p95'))} ms",

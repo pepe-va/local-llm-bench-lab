@@ -51,6 +51,11 @@ class ModelSpec(Strict):
     sha256: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")] | None = None
     enabled: bool = True
     retention: Literal["keep", "delete_after_run"] = "keep"
+    mmproj: str | None = None
+    """Multimodal projector for vision suites (a model reference, like `source`)."""
+    suites: list[str] | None = None
+    """Only these suites (by name) for this model; e.g. an embedding model only runs
+    embedding suites. Default: every suite of every enabled server phase."""
 
     @property
     def scheme(self) -> str:

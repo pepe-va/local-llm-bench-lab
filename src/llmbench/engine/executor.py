@@ -6,6 +6,7 @@ Ctrl-C records the current run as `interrupted` and stops cleanly; `--resume` co
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from llmbench.config.experiment import Experiment, ModelSpec
 from llmbench.engine import env as envmod
@@ -60,17 +61,17 @@ class _Models:
         if freed:
             self._events.log(f"model {spec.id}: removed from the HF cache ({freed / 1e9:.2f} GB)")
 
-    def draft(self, source: str) -> ModelHandle | None:
-        """Draft models for speculative decoding are resolved (and cached) like any model."""
-        key = f"draft:{source}"
+    def aux(self, kind: str, source: str) -> ModelHandle | None:
+        """Draft models and multimodal projectors are resolved (and cached) like any model."""
+        key = f"{kind}:{source}"
         if key not in self._cache:
-            self._cache[key] = self._resolve(ModelSpec(id="draft", source=source))
+            self._cache[key] = self._resolve(ModelSpec(id=kind, source=source), aux=True)
         return self._cache[key]
 
-    def _resolve(self, spec: ModelSpec) -> ModelHandle | None:
+    def _resolve(self, spec: ModelSpec, *, aux: bool = False) -> ModelHandle | None:
         try:
             resolved = self._models.resolve(spec)
-            meta = read_gguf(resolved.shards).summary()
+            meta: dict[str, Any] = read_gguf(resolved.shards).summary()
         except (ModelNotFoundError, GGUFError) as e:
             self._events.log(f"[error] {e}")
             return None
@@ -87,9 +88,13 @@ class _Models:
         where = (
             f"{resolved.repo}@{resolved.commit[:12]}" if resolved.repo and resolved.commit else ""
         )
+        kind = (
+            "projector"
+            if aux and spec.id == "mmproj"
+            else f"{meta['quant']}, {(meta['n_params'] or 0) / 1e9:.2f}B params"
+        )
         self._events.log(
-            f"model {spec.id}: {resolved.path.name} {where} ({resolved.origin}, "
-            f"{meta['quant']}, {meta['n_params'] / 1e9:.2f}B params)"
+            f"model {spec.id}: {resolved.path.name} {where} ({resolved.origin}, {kind})"
         )
         info = model_info(resolved, digest) | {"gguf": meta}
         return ModelHandle(resolved.path, digest, info, resolved)
@@ -162,14 +167,27 @@ def _dispatch(
         return "failed"
     if spec.phase == "bench":
         return run_bench_spec(ctx, spec, rb=rb, model=model, index=index, total=total)
-    draft = None
+    draft = mmproj = None
     if spec.config.speculative.draft_model is not None:
-        draft = models.draft(spec.config.speculative.draft_model)
+        draft = models.aux("draft", spec.config.speculative.draft_model)
         if draft is None:
             ctx.events.run_skipped(index, total, spec, "draft model could not be resolved")
             return "failed"
+    if spec.model.mmproj is not None:
+        mmproj = models.aux("mmproj", spec.model.mmproj)
+        if mmproj is None:
+            ctx.events.run_skipped(index, total, spec, "mmproj could not be resolved")
+            return "failed"
     return run_suite_spec(
-        ctx, spec, rb=rb, model=model, draft=draft, pool=pool, index=index, total=total
+        ctx,
+        spec,
+        rb=rb,
+        model=model,
+        draft=draft,
+        mmproj=mmproj,
+        pool=pool,
+        index=index,
+        total=total,
     )
 
 

@@ -1,0 +1,28 @@
+# Reranking: for each query, which documents are relevant (indices into `documents`).
+# Metrics: nDCG@k, MRR, recall@k and top-1 accuracy.
+version: 1
+name: rerank-es
+endpoint: rerank
+k: 3
+source:
+  items:
+    - query: ¿Qué es un panda?
+      documents:
+        - Pandas es una biblioteca de Python para análisis de datos.
+        - El panda gigante es un oso originario de China que se alimenta de bambú.
+        - El bambú crece muy rápido.
+        - Los osos pardos viven en Norteamérica.
+      relevant: [1]
+    - query: ¿Cómo se hace una tortilla de patatas?
+      documents:
+        - Se fríen patatas y cebolla, se mezclan con huevo batido y se cuaja en la sartén.
+        - La patata llegó a Europa desde América.
+        - Una tortilla mexicana es una torta fina de maíz.
+      relevant: [0]
+    - query: Horario de apertura de la biblioteca
+      documents:
+        - La biblioteca abre de lunes a viernes de 9:00 a 20:00.
+        - La biblioteca tiene más de 20.000 libros.
+        - El museo abre los domingos.
+        - Los sábados la biblioteca abre de 10:00 a 14:00.
+      relevant: [0, 3]

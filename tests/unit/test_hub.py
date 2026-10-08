@@ -290,3 +290,12 @@ def test_network_errors_mean_unavailable_not_crash(monkeypatch: pytest.MonkeyPat
     monkeypatch.setattr(client.api, "model_info", boom)
     with pytest.raises(HubUnavailableError, match="403"):
         client.list_repo("o/r", None)
+
+
+def test_explicit_path_may_name_an_mmproj() -> None:
+    lst = listing("m-Q8_0.gguf", "mmproj-m-f16.gguf")
+    assert [f.name for f in pick_files(lst, HfRef("o/r", file="mmproj-m-f16.gguf"))] == [
+        "mmproj-m-f16.gguf"
+    ]
+    with pytest.raises(ModelNotFoundError):  # quant selection never picks a projector
+        pick_files(lst, HfRef("o/r", quant="F16"))

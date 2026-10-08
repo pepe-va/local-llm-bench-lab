@@ -99,6 +99,16 @@ def load_suite(path: Path) -> Suite:
     corpus = synthetic.get("corpus") if synthetic is not None else None
     if synthetic is not None and isinstance(corpus, str) and corpus != "words":
         synthetic["corpus"] = _anchored(corpus, path.parent)
+    source_node = _node(doc, "source")
+    items = source_node.get("items") if source_node is not None else None
+    if isinstance(items, list):
+        for raw in cast(list[Any], items):
+            if not isinstance(raw, dict):
+                continue
+            item = cast(dict[str, Any], raw)
+            image = item.get("image")
+            if isinstance(image, str) and not image.startswith(("http://", "https://", "data:")):
+                item["image"] = _anchored(image, path.parent)
     file = _node(doc, "source", "file")
     if file is not None and isinstance(file.get("path"), str):
         file["path"] = _anchored(str(file["path"]), path.parent)

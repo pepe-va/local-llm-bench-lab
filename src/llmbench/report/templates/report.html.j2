@@ -99,11 +99,11 @@
   <h2>Quality</h2>
   {{ filtered('t-quality') }}
   <div class="wrap"><table id="t-quality">
-    <tr><th>model</th><th>quant</th><th>variant</th><th>suite</th><th>score</th><th>pass rate</th><th>scored</th><th>judge</th><th>gen t/s</th><th>words/s</th></tr>
+    <tr><th>model</th><th>quant</th><th>variant</th><th>suite</th><th>score</th><th>pass rate</th><th>scored</th><th>judge</th><th>spearman</th><th>nDCG</th><th>MRR</th><th>gen t/s</th><th>words/s</th></tr>
     {% for r in d.quality %}
     <tr><td>{{ r.model }}</td><td>{{ r.quant | fmt }}</td><td>{{ r.variant }}</td><td>{{ r.suite }}</td>
       <td class="num">{{ r.score_mean | fmt(3) }}</td><td class="num">{{ r.pass_rate | pct }}</td><td class="num">{{ r.scored | fmt(0) }}</td>
-      <td class="num">{{ r['judge.overall_mean'] | fmt(2) }}</td><td class="num">{{ r.gen_tps_mean | fmt }}</td><td class="num">{{ r.words_per_s_mean | fmt }}</td></tr>
+      <td class="num">{{ r['judge.overall_mean'] | fmt(2) }}</td><td class="num">{{ r.spearman | fmt(3) }}</td><td class="num">{{ r.ndcg | fmt(3) }}</td><td class="num">{{ r.mrr | fmt(3) }}</td><td class="num">{{ r.gen_tps_mean | fmt }}</td><td class="num">{{ r.words_per_s_mean | fmt }}</td></tr>
     {% endfor %}
   </table></div>
   {% endif %}

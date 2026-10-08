@@ -1,0 +1,21 @@
+# Vision sanity check: simple shapes and colors with verifiable answers.
+# The model needs a multimodal projector: `mmproj:` in the experiment's model entry.
+version: 1
+name: vision-basic
+endpoint: chat
+system: Answer with as few words as possible.
+max_tokens: 16
+source:
+  items:
+    - { id: red, category: color, image: images/red-circle.png, prompt: What color is the shape?,
+        evaluator: { type: contains, values: [red] } }
+    - { id: circle, category: shape, image: images/red-circle.png, prompt: What shape is it?,
+        evaluator: { type: contains, values: [circle] } }
+    - { id: blue, category: color, image: images/blue-square.png, prompt: What color is the shape?,
+        evaluator: { type: contains, values: [blue] } }
+    - { id: square, category: shape, image: images/blue-square.png, prompt: What shape is it?,
+        evaluator: { type: any, of: [{ type: contains, values: [square] }, { type: contains, values: [rectangle] }] } }
+    - { id: green, category: color, image: images/green-triangle.png, prompt: What color is the shape?,
+        evaluator: { type: contains, values: [green] } }
+    - { id: triangle, category: shape, image: images/green-triangle.png, prompt: What shape is it?,
+        evaluator: { type: contains, values: [triangle] } }

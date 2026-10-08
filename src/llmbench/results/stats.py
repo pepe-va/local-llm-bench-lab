@@ -1,8 +1,10 @@
 """Descriptive statistics over per-repetition samples."""
 
+import json
 import statistics
 from dataclasses import replace
 
+from llmbench.evaluation.retrieval import pearson, spearman
 from llmbench.results.models import Measurement, RequestResult
 
 
@@ -77,3 +79,35 @@ def quality_metrics(results: list[RequestResult]) -> dict[str, float | None]:
     out["chars_per_s_mean"] = statistics.fmean(chars) if chars else None
     out["words_per_s_mean"] = statistics.fmean(words) if words else None
     return out
+
+
+def retrieval_metrics(
+    results: list[RequestResult], endpoint: str, k: int
+) -> dict[str, float | None]:
+    """Embeddings: correlation of cosine similarity with labels. Rerank: nDCG@k, MRR, recall@k."""
+    ok = [r for r in results if r.ok]
+    if endpoint == "embeddings":
+        pairs = [
+            (r.similarity, r.label) for r in ok if r.similarity is not None and r.label is not None
+        ]
+        sims = [s for s, _ in pairs]
+        labels = [lab for _, lab in pairs]
+        return {
+            "spearman": spearman(sims, labels),
+            "pearson": pearson(sims, labels),
+            "cosine_mean": statistics.fmean(sims) if sims else None,
+            "embed_tps_mean": _mean([r.prompt_tps for r in ok]),
+        }
+    details = [json.loads(r.eval_detail) for r in ok if r.eval_detail]
+    return {
+        f"ndcg@{k}": _mean([r.score for r in ok]),
+        "mrr": _mean([d["mrr"] for d in details]),
+        f"recall@{k}": _mean([d[f"recall@{k}"] for d in details]),
+        "top1_accuracy": _mean([1.0 if r.passed else 0.0 for r in ok]),
+        "rerank_tps_mean": _mean([r.prompt_tps for r in ok]),
+    }
+
+
+def _mean(xs: list[float | None]) -> float | None:
+    vals = [x for x in xs if x is not None]
+    return statistics.fmean(vals) if vals else None

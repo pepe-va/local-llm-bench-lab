@@ -72,11 +72,22 @@ class Item(Strict):
     id: str | None = None
     category: str | None = None
     system: str | None = None
-    prompt: str
+    prompt: str = ""
     input: str | None = None
     reference: str | None = None
     max_tokens: Annotated[int, Field(gt=0)] | None = None
     evaluator: EvaluatorSpec | None = None
+    # vision (chat endpoint)
+    image: str | None = None
+    """Image path (relative to the suite file) or http(s)/data URL."""
+    # embeddings: a pair and its similarity label
+    a: str | None = None
+    b: str | None = None
+    label: float | None = None
+    # rerank: a query, candidate documents and the indices of the relevant ones
+    query: str | None = None
+    documents: list[str] | None = None
+    relevant: list[int] | None = None
 
 
 class FileSource(Strict):
@@ -121,13 +132,25 @@ class Columns(Strict):
     id: str | None = None
     category: str | None = None
     system: str | None = None
+    image: str | None = None
+    a: str | None = None
+    b: str | None = None
+    label: str | None = None
+    query: str | None = None
+    documents: str | None = None
+    relevant: str | None = None
 
 
 class Suite(Strict):
     version: Literal[1] = 1
     name: Slug
     description: str = ""
-    endpoint: Literal["completion", "chat"] = "completion"
+    endpoint: Literal["completion", "chat", "embeddings", "rerank"] = "completion"
+    """`chat` items may carry an `image` (vision, needs the model's `mmproj`)."""
+    pooling: Literal["none", "mean", "cls", "last"] | None = None
+    """Embeddings pooling passed to llama-server (`--pooling`); model default if unset."""
+    k: Annotated[int, Field(gt=0)] = 10
+    """Cut-off for rerank metrics (nDCG@k, recall@k)."""
     source: SuiteSource
     columns: Columns = Columns()
     system: str | None = None
@@ -143,3 +166,26 @@ class Suite(Strict):
     @property
     def is_synthetic(self) -> bool:
         return self.source.synthetic is not None
+
+    @property
+    def server_mode(self) -> str:
+        """What the server must be started for: generation, embeddings or reranking."""
+        if self.endpoint == "embeddings":
+            return f"embeddings:{self.pooling or 'default'}"
+        return "rerank" if self.endpoint == "rerank" else "generate"
+
+    @model_validator(mode="after")
+    def _endpoint_fits_source(self) -> Self:
+        if self.is_synthetic and self.endpoint in ("embeddings", "rerank"):
+            raise ValueError("synthetic sources only feed the completion and chat endpoints")
+        needed = {
+            "completion": ("prompt",),
+            "chat": ("prompt",),
+            "embeddings": ("a", "b"),
+            "rerank": ("query", "documents", "relevant"),
+        }[self.endpoint]
+        for i, item in enumerate(self.source.items or []):
+            missing = [f for f in needed if not getattr(item, f)]
+            if missing:
+                raise ValueError(f"items[{i}]: {self.endpoint} items need {', '.join(missing)}")
+        return self

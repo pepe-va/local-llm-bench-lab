@@ -132,10 +132,24 @@ def server_argv(
     *,
     port: int,
     draft_model: Path | None = None,
+    mmproj: Path | None = None,
+    mode: str = "generate",
 ) -> Argv:
-    """llama-server bound to 127.0.0.1 (never exposed; see PRD §37)."""
+    """llama-server bound to 127.0.0.1 (never exposed; see PRD §37).
+
+    `mode` comes from the suite: `generate`, `embeddings:<pooling|default>` or `rerank`.
+    """
     a: list[str] = [str(binary), "-m", str(model), "--host", "127.0.0.1", "--port", str(port)]
     a += ["--no-webui", "--metrics"]
+    if mmproj is not None:
+        a += ["-mm", str(mmproj)]
+    if mode.startswith("embeddings"):
+        a.append("--embeddings")
+        pooling = mode.split(":", 1)[1] if ":" in mode else "default"
+        if pooling != "default":
+            a += ["--pooling", pooling]
+    elif mode == "rerank":
+        a.append("--reranking")
     ignored: list[str] = []
 
     ld = cfg.load

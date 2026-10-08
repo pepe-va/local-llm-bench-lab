@@ -1,0 +1,19 @@
+# Semantic similarity in Spanish (STS-style): pairs with a human score 0-5.
+# Metric: Spearman correlation between embedding cosine similarity and the labels.
+version: 1
+name: embed-sts-es
+endpoint: embeddings
+source:
+  items:
+    - { a: El gato duerme en el sofá., b: Un gato está durmiendo en el sillón., label: 4.6 }
+    - { a: El gato duerme en el sofá., b: El perro ladra en el jardín., label: 1.2 }
+    - { a: Mañana lloverá en Madrid., b: Se esperan lluvias en Madrid para mañana., label: 4.8 }
+    - { a: Mañana lloverá en Madrid., b: El Real Madrid ganó ayer., label: 0.6 }
+    - { a: Compré pan en la panadería., b: Fui a la panadería a por pan., label: 4.4 }
+    - { a: Compré pan en la panadería., b: La biblioteca cierra a las ocho., label: 0.2 }
+    - { a: El tren sale a las nueve., b: El tren parte a las 9., label: 4.9 }
+    - { a: El tren sale a las nueve., b: El avión aterrizó con retraso., label: 1.5 }
+    - { a: Ella estudia medicina., b: Ella es estudiante de medicina., label: 4.7 }
+    - { a: Ella estudia medicina., b: Él toca la guitarra., label: 0.4 }
+    - { a: La reunión se ha aplazado., b: Han pospuesto la reunión., label: 4.5 }
+    - { a: La reunión se ha aplazado., b: La reunión empezó puntual., label: 2.0 }

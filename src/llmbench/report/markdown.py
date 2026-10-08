@@ -47,10 +47,12 @@ def latency_table(d: ReportData) -> str:
 
 def quality_table(d: ReportData) -> str:
     return _table(
-        ["model", "quant", "variant", "suite", "score", "pass rate", "judge", "gen t/s", "words/s"],
+        ["model", "quant", "variant", "suite", "score", "pass rate", "judge", "spearman", "nDCG",
+         "MRR", "gen t/s", "words/s"],
         [
             [r["model"], _fmt(r["quant"]), r["variant"], r["suite"], _fmt(r.get("score_mean"), 3),
              _pct(r.get("pass_rate")), _fmt(r.get("judge.overall_mean"), 2),
+             _fmt(r.get("spearman"), 3), _fmt(r.get("ndcg"), 3), _fmt(r.get("mrr"), 3),
              _fmt(r.get("gen_tps_mean")), _fmt(r.get("words_per_s_mean"))]
             for r in d.quality
         ],

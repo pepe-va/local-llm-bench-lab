@@ -29,6 +29,14 @@ def opt(args: list[str], *names: str, default: str | None = None) -> str | None:
     return default
 
 
+def embed(text: str) -> list[float]:
+    """Bag-of-words vector: texts sharing words get a high cosine similarity."""
+    vec = [0.0] * 64
+    for w in text.lower().replace(".", "").split():
+        vec[sum(map(ord, w)) % 64] += 1.0
+    return vec
+
+
 def tokenize(text: str) -> list[int]:
     return [2 + (sum(map(ord, w)) % 997) for w in text.split()]
 
@@ -68,6 +76,22 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/v1/chat/completions":
             self._chat(req)
             return
+        if self.path == "/v1/embeddings":
+            if "--embeddings" not in sys.argv:
+                self._json({"error": "embeddings not enabled"}, 400)
+                return
+            self._json({"data": [{"embedding": embed(t)} for t in req["input"]],
+                        "usage": {"prompt_tokens": sum(len(tokenize(t)) for t in req["input"])}})
+            return
+        if self.path == "/v1/rerank":
+            if "--reranking" not in sys.argv:
+                self._json({"error": "reranking not enabled"}, 400)
+                return
+            q = set(req["query"].lower().split())
+            results = [{"index": i, "relevance_score": len(q & set(d.lower().split())) / (1 + len(q))}
+                       for i, d in enumerate(req["documents"])]
+            self._json({"results": results, "usage": {"prompt_tokens": 10}})
+            return
         if self.path != "/completion":
             self._json({"error": "not found"}, 404)
             return
@@ -97,9 +121,19 @@ class Handler(BaseHTTPRequestHandler):
 
     def _chat(self, req: dict) -> None:
         """OpenAI-style SSE; the answer is $FAKE_CHAT_ANSWER (default: echo of the last message)."""
-        text = os.environ.get("FAKE_CHAT_ANSWER") or req["messages"][-1]["content"]
+        content = req["messages"][-1]["content"]
+        if isinstance(content, list):  # vision: text part + image part
+            has_image = any(p.get("type") == "image_url" for p in content)
+            if has_image and "-mm" not in sys.argv:
+                self._json({"error": "image input is not supported (no mmproj)"}, 500)
+                return
+            content = " ".join(p["text"] for p in content if p.get("type") == "text")
+        text = os.environ.get("FAKE_CHAT_ANSWER") or content
         words = text.split(" ")
-        prompt_n = sum(1 + len(tokenize(m["content"])) for m in req["messages"])
+        prompt_n = sum(
+            1 + len(tokenize(m["content"] if isinstance(m["content"], str) else content))
+            for m in req["messages"]
+        )
         STATS["prompt_tokens_total"] += prompt_n
         STATS["tokens_predicted_total"] += len(words)
         self.send_response(200)

@@ -344,3 +344,55 @@ def test_gates_guide_and_reports(tmp_path: Path, fake_bin_dir: Path, tiny_model:
     r = runner.invoke(app, ["report", str(tmp_path / "out"), "-f", "md", "-o", str(tmp_path / "r")])
     assert r.exit_code == 0, out(r)
     assert "## Latency (llama-server)" in (tmp_path / "r" / "report.md").read_text()
+
+
+def test_modalities_with_fake_server(
+    tmp_path: Path, fake_bin_dir: Path, tiny_model: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    starts = tmp_path / "starts.txt"
+    monkeypatch.setenv("FAKE_SERVER_STARTS", str(starts))
+    monkeypatch.setenv("FAKE_CHAT_ANSWER", "A red circle.")
+    projector = tmp_path / "mmproj.gguf"
+    projector.write_bytes((tmp_path / "tiny.gguf").read_bytes())
+    (tmp_path / "img.png").write_bytes(b"\x89PNG")
+    (tmp_path / "emb.yaml").write_text(
+        "name: emb\nendpoint: embeddings\npooling: mean\nsource:\n  items:\n"
+        "    - {a: el gato duerme, b: el gato duerme mucho, label: 4.5}\n"
+        "    - {a: el gato duerme, b: llueve en Madrid, label: 0.5}\n"
+        "    - {a: me gusta el pan, b: me gusta el pan tostado, label: 4.0}\n"
+    )
+    (tmp_path / "rr.yaml").write_text(
+        "name: rr\nendpoint: rerank\nk: 2\nsource:\n  items:\n"
+        "    - {query: panda oso, documents: [python pandas, el panda es un oso, bambu],"
+        " relevant: [1]}\n"
+    )
+    (tmp_path / "vis.yaml").write_text(
+        "name: vis\nendpoint: chat\nsource:\n  items:\n"
+        "    - {image: img.png, prompt: color?, evaluator: {type: contains, values: [red]}}\n"
+    )
+    exp = tmp_path / "mod.yaml"
+    exp.write_text(
+        f"""
+experiment: {{name: mod}}
+llama_cpp: {{builds: [{{id: fake, bin_dir: {fake_bin_dir}}}]}}
+models:
+  - {{id: emb, source: {tiny_model}, suites: [emb, rr]}}
+  - {{id: vlm, source: {tiny_model}, mmproj: {projector}, suites: [vis]}}
+phases:
+  bench: {{enabled: false}}
+  quality: {{enabled: true, suites: [emb.yaml, rr.yaml, vis.yaml]}}
+hardware: {{cooldown: {{enabled: false}}, telemetry: {{sources: [linux]}}}}
+output: {{directory: {tmp_path / "out"}, report: [md]}}
+"""
+    )
+    r = runner.invoke(app, ["run", "-y", str(exp)])
+    assert r.exit_code == 0, out(r)
+    assert "spearman " in out(r)
+    assert "nDCG 1.000 · MRR 1.000 · top-1 100%" in out(r)
+    assert "score 1.000 · pass 100%" in out(r)
+    lines = starts.read_text().splitlines()
+    assert any("--embeddings --pooling mean" in line for line in lines)
+    assert any("--reranking" in line for line in lines)
+    assert any(f"-mm {projector}" in line for line in lines)
+    report = (tmp_path / "out" / "report.md").read_text()
+    assert "| spearman | nDCG | MRR |" in report

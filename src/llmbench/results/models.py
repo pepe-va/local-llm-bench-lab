@@ -62,6 +62,10 @@ class RequestResult:
     passed: bool | None = None
     eval_detail: str | None = None
     judge_pending: bool = False
+    label: float | None = None
+    """Embeddings: the human similarity label of the pair."""
+    similarity: float | None = None
+    """Embeddings: cosine similarity of the pair."""
 
 
 @dataclass(frozen=True)

@@ -104,4 +104,9 @@ def _add_run(data: ReportData, row: ConfigRow, run: dict[str, Any]) -> None:
     elif run["phase"] == "latency":
         data.latency.append(base | {"suite": run["suite"]} | metrics)
     elif run["phase"] == "quality":
-        data.quality.append(base | {"suite": run["suite"]} | metrics)
+        # rerank cut-offs vary per suite (ndcg@3, ndcg@10...): expose them under stable keys
+        extra = {
+            short: next((v for k, v in metrics.items() if k.startswith(prefix)), None)
+            for short, prefix in (("ndcg", "ndcg@"), ("recall", "recall@"))
+        }
+        data.quality.append(base | {"suite": run["suite"]} | metrics | extra)

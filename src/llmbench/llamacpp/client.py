@@ -11,6 +11,7 @@ from typing import Any
 import httpx
 
 from llmbench.data.requests import Request
+from llmbench.evaluation.retrieval import cosine, mrr, ndcg_at_k, recall_at_k
 from llmbench.results.models import RequestResult
 
 
@@ -47,6 +48,62 @@ class LlamaClient:
             body = {**sampling, "prompt": req.prompt, "n_predict": req.n_predict}
         body |= {"stream": True, "cache_prompt": False}  # full prompt processing every time
         return self._stream(req, path, body, chat=endpoint == "chat")
+
+    def embed(self, req: Request) -> RequestResult:
+        """Embed the pair (`a`, `b`), or the prompt, and report the cosine similarity."""
+        texts = [req.a, req.b] if req.a is not None and req.b is not None else [str(req.prompt)]
+        t0 = time.perf_counter()
+        try:
+            r = self._http.post("/v1/embeddings", json={"input": texts})
+            r.raise_for_status()
+            data: dict[str, Any] = r.json()
+        except (httpx.HTTPError, json.JSONDecodeError) as e:
+            return RequestResult(req.id, ok=False, error=f"{type(e).__name__}: {e}")
+        e2e = (time.perf_counter() - t0) * 1000
+        vectors: list[list[float]] = [d["embedding"] for d in data["data"]]
+        prompt_n = int(data.get("usage", {}).get("prompt_tokens", 0)) or None
+        sim = cosine(vectors[0], vectors[1]) if len(vectors) == 2 else None  # noqa: PLR2004
+        return RequestResult(
+            req.id,
+            ok=True,
+            e2e_ms=e2e,
+            prompt_n=prompt_n,
+            prompt_tps=prompt_n / (e2e / 1000) if prompt_n and e2e else None,
+            category=req.category,
+            label=req.label,
+            similarity=sim,
+        )
+
+    def rerank(self, req: Request, *, k: int) -> RequestResult:
+        """Rank `documents` for `query`; score = nDCG@k against the `relevant` indices."""
+        body = {"query": req.query, "documents": list(req.documents), "top_n": len(req.documents)}
+        t0 = time.perf_counter()
+        try:
+            r = self._http.post("/v1/rerank", json=body)
+            r.raise_for_status()
+            data: dict[str, Any] = r.json()
+        except (httpx.HTTPError, json.JSONDecodeError) as e:
+            return RequestResult(req.id, ok=False, error=f"{type(e).__name__}: {e}")
+        e2e = (time.perf_counter() - t0) * 1000
+        ranking = _ranked(data["results"])
+        relevant = set(req.relevant)
+        prompt_n = int(data.get("usage", {}).get("prompt_tokens", 0)) or None
+        detail = {
+            "ranking": ranking,
+            "mrr": mrr(ranking, relevant),
+            f"recall@{k}": recall_at_k(ranking, relevant, k),
+        }
+        return RequestResult(
+            req.id,
+            ok=True,
+            e2e_ms=e2e,
+            prompt_n=prompt_n,
+            prompt_tps=prompt_n / (e2e / 1000) if prompt_n and e2e else None,
+            category=req.category,
+            score=ndcg_at_k(ranking, relevant, k),
+            passed=bool(ranking) and ranking[0] in relevant,
+            eval_detail=json.dumps(detail),
+        )
 
     def _stream(
         self, req: Request, path: str, body: dict[str, Any], *, chat: bool
@@ -114,6 +171,11 @@ class LlamaClient:
             prompt_text=req.prompt if isinstance(req.prompt, str) else None,
             category=req.category,
         )
+
+
+def _ranked(results: list[dict[str, Any]]) -> list[int]:
+    ordered = sorted(results, key=lambda r: float(r["relevance_score"]), reverse=True)
+    return [int(r["index"]) for r in ordered]
 
 
 def _delta(event: dict[str, Any], *, chat: bool) -> tuple[str, str, str | None]:

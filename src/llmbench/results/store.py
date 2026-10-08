@@ -125,8 +125,8 @@ class Store:
                 """INSERT INTO requests (run_id, idx, request_id, pass, ok, error, ttft_ms,
                     e2e_ms, prompt_n, prompt_ms, predicted_n, predicted_ms, prompt_tps, gen_tps,
                     cache_n, stop_type, itl_ms, content, reasoning, prompt_text, category, score,
-                    passed, eval_detail, judge_pending)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    passed, eval_detail, judge_pending, label, similarity)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 [
                     (
                         run_id,
@@ -154,6 +154,8 @@ class Store:
                         None if r.passed is None else int(r.passed),
                         r.eval_detail,
                         int(r.judge_pending),
+                        r.label,
+                        r.similarity,
                     )
                     for i, r in enumerate(run.requests)
                 ],

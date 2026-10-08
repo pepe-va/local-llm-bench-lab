@@ -41,6 +41,7 @@ class RunSpec:
                 "build": self.build.id,
                 "model": self.model.id,
                 "config": self.config.server_identity(),
+                "mode": self.suite.server_mode if self.suite else "generate",
             }
         )
 
@@ -121,6 +122,7 @@ def make_plan(exp: Experiment, *, model_ids: list[str] | None = None) -> Plan:
             for model in models
             for variant, cfg in configs
             for path, suite in loaded
+            if model.suites is None or suite.name in model.suites
         ]
     # stable sort: keeps phase and matrix order inside each server group
     order = {k: i for i, k in enumerate(dict.fromkeys(r.server_key() for r in served))}
@@ -190,6 +192,7 @@ def suite_fingerprint(
     model_sha256: str,
     draft_sha256: str | None,
     config: LlamaConfig,
+    mmproj_sha256: str | None = None,
     sampling: dict[str, Any],
     suite: Suite,
     phase_config: SuitePhase,
@@ -206,6 +209,7 @@ def suite_fingerprint(
             "build": build,
             "model_sha256": model_sha256,
             "draft_sha256": draft_sha256,
+            "mmproj_sha256": mmproj_sha256,
             "config": config.server_identity(),
             "sampling": sampling,
             "suite": suite.model_dump(mode="json", by_alias=True),

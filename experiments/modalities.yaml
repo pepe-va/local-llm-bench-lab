@@ -1,0 +1,28 @@
+# Embeddings, reranking and vision on the Pi (PRD scope extended after the GuideLLM review).
+version: 1
+extends: [_profiles/pi5.yaml, _profiles/deterministic.yaml]
+
+experiment:
+  name: pi5-modalities
+  tags: [pi5, embeddings, rerank, vision]
+
+models:
+  - id: bge-small
+    source: "hf://ggml-org/models/bert-bge-small/ggml-model-f16.gguf"
+    suites: [embed-sts-es]
+  - id: jina-reranker-tiny
+    source: "hf://ggml-org/models/jina-reranker-v1-tiny-en/ggml-model-f16.gguf"
+    suites: [rerank-es]
+  - id: smolvlm-256m
+    suites: [vision-basic]
+    source: "hf://ggml-org/SmolVLM-256M-Instruct-GGUF:Q8_0"
+    mmproj: "hf://ggml-org/SmolVLM-256M-Instruct-GGUF/mmproj-SmolVLM-256M-Instruct-Q8_0.gguf"
+
+defaults:
+  load: { threads: 4, ctx_size: 4096 }
+
+phases:
+  bench: { enabled: false }
+  quality:
+    enabled: true
+    suites: [../suites/embed-sts-es.yaml, ../suites/rerank-es.yaml, ../suites/vision-basic.yaml]
