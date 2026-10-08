@@ -5,6 +5,35 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-08
+
+Phase 3: llama-server and synthetic data.
+
+### Added
+
+- `phases.latency`: sends suites of requests to `llama-server` one at a time and measures client-side TTFT, inter-token latency and end-to-end latency, plus the server's own prompt and generation throughput. Supports warmup requests and `passes`. Every request runs with `cache_prompt: false` (ADR-0013).
+- llama-server lifecycle: free local port on 127.0.0.1 only, health wait, `/props`, per-server log files, clean shutdown, and a remembered start failure per server.
+- A `ServerPool` reuses one llama-server process across runs that share a server key (build, model, non-sampling config). Runs that only differ in sampling or suite never restart the server.
+- Synthetic suites (`suites/*.yaml`) with prompts of exactly N tokens per model: windows of the model's own tokens, BOS included. `prompt_tokens` and `output_tokens` can be fixed, uniform or normal, with a seed and an optional corpus file. `ignore_eos` is on by default.
+- Config sections `rope`, `speculative` (including a draft model resolved like any model), `server` and `sampling` (sent per request), covering the llama-server flags of commit `c811cb8`.
+- `llb validate` checks llama-server flags and suites. `llb plan` reports latency runs, server starts and timed requests.
+- Speculative decoding acceptance rate from `/metrics`.
+- Database migration 0002 (`requests`, `run_metrics`, `runs.suite`) and a `latency.csv` export.
+- Example suites `synthetic-512x128` and `synthetic-chat-mix`, the `deterministic` profile, and the `pi5-latency` experiment.
+- A fake `llama-server` for integration tests and a flag contract test against the real server help.
+- ADR-0012 (peak memory via `VmHWM`) and ADR-0013 (latency methodology).
+
+### Changed
+
+- Peak RSS now comes from `/proc/<pid>/status` `VmHWM`, read every 20 ms. `ru_maxrss` included the Python parent's memory from before `exec`, so a 13 MB llama-bench could show 313 MB (ADR-0012 supersedes ADR-0007).
+- The bench fingerprint only covers bench-relevant config (`load`, `kv`, `gpu`, `env`, `extra_args.bench`), so a sampling axis no longer duplicates llama-bench runs. **`--resume` will not recognize bench runs recorded by earlier versions.**
+- `server.parallel` defaults to 1 slot (llama.cpp's own default is auto/4).
+- The engine is split into `engine/runtime.py` and `engine/phases/{bench,latency}.py`.
+
+### Fixed
+
+- `--help` parsing no longer treats flags marked "the argument has been removed" as supported, nor indented description lines that mention other flags.
+
 ## [0.3.0] - 2026-10-08
 
 Phase 2: Hugging Face models.
@@ -62,7 +91,8 @@ Phase 0: project skeleton.
 - ruff, basedpyright (strict), pytest, pre-commit, and GitHub Actions on x86_64 and arm64.
 - Project proposal (`docs/PRD.md`) and plan (`docs/PLAN.md`).
 
-[Unreleased]: https://github.com/OWNER/local-llm-bench-lab/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/OWNER/local-llm-bench-lab/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/OWNER/local-llm-bench-lab/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/OWNER/local-llm-bench-lab/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/OWNER/local-llm-bench-lab/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/OWNER/local-llm-bench-lab/releases/tag/v0.1.0
