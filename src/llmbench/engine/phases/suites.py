@@ -27,7 +27,7 @@ from llmbench.llamacpp.argv import Argv, server_argv
 from llmbench.llamacpp.builds import ResolvedBuild
 from llmbench.llamacpp.client import LlamaClient
 from llmbench.llamacpp.introspect import binary_flags, unknown_flags
-from llmbench.llamacpp.server import LlamaServer, ServerError
+from llmbench.llamacpp.server import LlamaServer, ServerError, next_log_path
 from llmbench.results.models import RequestResult, RunRecord, RunStatus
 from llmbench.results.stats import (
     latency_metrics,
@@ -55,7 +55,6 @@ class ServerPool:
     key: str | None = None
     server: LlamaServer | None = None
     client: LlamaClient | None = None
-    _count: int = 0
     _failed: dict[str, str] = field(default_factory=dict[str, str])
     _synthetic: dict[str, list[Request]] = field(default_factory=dict[str, list[Request]])
     _materialized: dict[Path, Materialized] = field(default_factory=dict[Path, Materialized])
@@ -69,10 +68,7 @@ class ServerPool:
         if self.key == key and self.server is not None and self.client is not None:
             return self.server, self.client, False
         self.release()
-        self._count += 1
-        server = LlamaServer(
-            make_argv, self.log_dir / f"server-{self._count:03d}.log", env, timeout_s
-        )
+        server = LlamaServer(make_argv, next_log_path(self.log_dir, "server"), env, timeout_s)
         self.events.log(f"starting llama-server ({server.log_path.name})...")
         try:
             server.start()

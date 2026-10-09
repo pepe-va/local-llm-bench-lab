@@ -18,7 +18,7 @@ from llmbench.hub.store import ModelNotFoundError, ModelStore
 from llmbench.llamacpp import builds
 from llmbench.llamacpp.argv import server_argv
 from llmbench.llamacpp.client import LlamaClient
-from llmbench.llamacpp.server import LlamaServer, ServerError
+from llmbench.llamacpp.server import LlamaServer, ServerError, next_log_path
 from llmbench.results.store import Store
 
 CRITERIA = {
@@ -95,7 +95,7 @@ def run_judge(
     events.log(f"judge: {len(pending)} response(s) with {judge_model.path.name}")
     server = LlamaServer(
         lambda port: server_argv(rb.tool("llama-server"), judge_model.path, llama_cfg, port=port),
-        store.path.parent / "logs" / "judge-server.log",
+        next_log_path(store.path.parent / "logs", "judge-server"),
         llama_cfg.env,
         cfg.startup_timeout_s,
     )

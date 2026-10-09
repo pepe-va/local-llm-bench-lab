@@ -18,7 +18,7 @@ from llmbench.engine.phases.suites import effective_sampling
 from llmbench.engine.planner import make_plan, suite_fingerprint
 from llmbench.llamacpp.argv import server_argv
 from llmbench.llamacpp.introspect import parse_help, unknown_flags
-from llmbench.llamacpp.server import parse_prometheus
+from llmbench.llamacpp.server import next_log_path, parse_prometheus
 from llmbench.results.models import RequestResult
 from llmbench.results.stats import latency_metrics, percentile
 from llmbench.telemetry.peak import PeakMemory
@@ -99,6 +99,14 @@ def test_help_parser_drops_removed_flags_and_continuations() -> None:
     assert "--spec-ngram-mod-n-max" in flags  # only mentioned in a removed flag's description
     assert "--draft-max" not in flags  # "the argument has been removed"
     assert "--spec-ngram-size-n" not in flags
+
+
+def test_log_numbering_never_overwrites(tmp_path: Path) -> None:
+    assert next_log_path(tmp_path, "server").name == "server-001.log"
+    (tmp_path / "server-001.log").write_text("earlier llb run")
+    (tmp_path / "judge-server-001.log").write_text("")
+    assert next_log_path(tmp_path, "server").name == "server-002.log"
+    assert next_log_path(tmp_path, "judge-server").name == "judge-server-002.log"
 
 
 def test_parse_prometheus() -> None:

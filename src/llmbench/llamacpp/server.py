@@ -154,6 +154,14 @@ class LlamaServer:
         return "\n".join(lines[-n:])
 
 
+def next_log_path(log_dir: Path, stem: str) -> Path:
+    """First free `<stem>-NNN.log`, so a later `llb run` never overwrites earlier logs."""
+    n = 1
+    while (path := log_dir / f"{stem}-{n:03d}.log").exists():
+        n += 1
+    return path
+
+
 def free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind(("127.0.0.1", 0))
