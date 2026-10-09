@@ -268,6 +268,20 @@ def test_validate_checks_server_flags(tmp_path: Path, fake_bin_dir: Path, tiny_m
     assert "suite syn" in out(r)
 
 
+def test_validate_covers_serving(tmp_path: Path, fake_bin_dir: Path, tiny_model: Path) -> None:
+    exp = latency_experiment(tmp_path, fake_bin_dir, tiny_model)
+    exp.write_text(
+        exp.read_text().replace(
+            "  latency: {enabled: true, suites: [suites/syn.yaml], passes: 2, warmup_requests: 1}",
+            "  serving: {enabled: true, suites: [suites/syn.yaml], concurrency: [1, 3]}",
+        )
+    )
+    r = runner.invoke(app, ["validate", str(exp)])
+    assert r.exit_code == 0, out(r)
+    assert "suite syn" in out(r)
+    assert "all llama-server flags supported" in out(r)
+
+
 def test_quality_run_scores_chat_answers(
     tmp_path: Path, fake_bin_dir: Path, tiny_model: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

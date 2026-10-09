@@ -32,10 +32,9 @@ def validate(experiment: ExperimentArg) -> None:
     tools: list[tuple[str, Callable[[Path, LlamaConfig], Argv]]] = []
     if exp.phases.bench.enabled:
         tools.append(("llama-bench", lambda b, c: bench_argv(b, b, c, exp.phases.bench)))
-    server_suites = [
-        s for ph in (exp.phases.latency, exp.phases.quality) if ph.enabled for s in ph.suites
-    ]
-    if server_suites:
+    phases = (exp.phases.latency, exp.phases.quality, exp.phases.serving)
+    server_suites = list(dict.fromkeys(s for ph in phases if ph.enabled for s in ph.suites))
+    if server_suites or exp.phases.lm_eval.enabled:
         tools.append(
             (
                 "llama-server",
@@ -44,8 +43,8 @@ def validate(experiment: ExperimentArg) -> None:
                 ),
             )
         )
-        for suite in server_suites:
-            console.print(f"[green]✓[/] suite {load_suite(suite).name}: {suite}")
+    for suite in server_suites:
+        console.print(f"[green]✓[/] suite {load_suite(suite).name}: {suite}")
     for spec in exp.llama_cpp.builds:
         try:
             rb = builds.resolve(spec)
