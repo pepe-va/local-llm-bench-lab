@@ -5,6 +5,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-10-09
+
+Serving runs could ask llama-server for more context than a slot has. llb now reports that before measuring, and fixes the example experiment that ran into it.
+
+### Added
+
+- `llb validate`, `llb plan` and `llb run` warn when a synthetic suite has requests whose prompt plus output exceed the context of one llama-server slot (`ctx_size / parallel`, or the whole `ctx_size` with `kv.unified`). Synthetic shapes are seeded, so this is known before anything runs. Suites of items, files and datasets are not checked.
+
+### Fixed
+
+- `llb validate` ignored the serving phase. When serving (or lm_eval) was the only llama-server phase, its suites were not loaded and llama-server flags were not checked against the build.
+- A second `llb run` in the same output directory (for example with `--resume`) overwrote `logs/server-NNN.log` from earlier invocations. Numbering now continues from the last log. The judge's log is numbered too (`logs/judge-server-NNN.log`).
+- `experiments/serving.yaml` split 8192 tokens across 8 slots, leaving 1024 per slot, while 3 of its 32 requests need up to 1169. It now uses `ctx_size: 12288` (1536 per slot). Its runs get new fingerprints, so `--resume` does not match earlier results of this experiment.
+
 ## [0.10.0] - 2026-10-08
 
 Completes the plan's statistics: every llama-bench test now carries its interquartile range and a 95% confidence interval.
@@ -210,7 +224,8 @@ Phase 0: project skeleton.
 - ruff, basedpyright (strict), pytest, pre-commit, and GitHub Actions on x86_64 and arm64.
 - Project proposal (`docs/PRD.md`) and plan (`docs/PLAN.md`).
 
-[Unreleased]: https://github.com/OWNER/local-llm-bech-lab/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/OWNER/local-llm-bech-lab/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/OWNER/local-llm-bech-lab/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/OWNER/local-llm-bech-lab/compare/v0.9.1...v0.10.0
 [0.9.1]: https://github.com/OWNER/local-llm-bech-lab/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/OWNER/local-llm-bench-lab/compare/v0.8.0...v0.9.0
