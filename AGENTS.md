@@ -3,6 +3,7 @@
 Instructions for AI coding agents (and humans) working on **local-llm-bench-lab**: a reproducible benchmarking lab for local LLMs on llama.cpp. Package `llmbench`, CLI `llb`. Read this before changing code, and keep it up to date when the rules change.
 
 ## Orientation
+> `docs/` is local-only (not in git): the links below work only in a working copy that has it.
 
 | Read | For |
 |---|---|
@@ -17,13 +18,19 @@ Instructions for AI coding agents (and humans) working on **local-llm-bench-lab*
 
 ```bash
 uv sync --extra report --extra serve --extra hf-datasets   # dev environment (same extras as CI)
+uv run pre-commit install                                  # once per clone: commit and push hooks
 uv run ruff check && uv run ruff format --check            # lint + format
 uv run basedpyright                                        # types (strict, src + tests)
 uv run pytest --cov                                        # tests (no network)
 uv run llb --help
 ```
 
-All four checks must pass before every commit. CI runs them on x86_64 and arm64.
+All four checks must pass before every commit, and the hooks enforce it ([ADR-0021](docs/adr/0021-quality-pipeline-and-releases.md)):
+
+- the **pre-commit** hook runs file hygiene, `uv lock --check`, ruff and basedpyright;
+- the **pre-push** hook runs pytest.
+
+The hooks call the tools through `uv run`, so they use the versions locked in `uv.lock`. CI runs the same pre-commit hooks, and runs pytest on x86_64 and arm64. Never skip the hooks (`--no-verify`) to get a commit through: fix the cause.
 
 ## Code rules
 
@@ -34,7 +41,7 @@ All four checks must pass before every commit. CI runs them on x86_64 and arm64.
   2. its mapping in `argv.py`, or a mention in `ignored`;
   3. coverage in the "full config" contract tests (`test_every_*_flag_exists_in_the_real_binary`), updating the syrupy snapshot (`uv run pytest --snapshot-update`) and reviewing the diff;
   4. a row in the MODELS.md flag tables.
-- **Never guess llama.cpp behaviour.** Check a real binary (`--help`, an actual request) and store new outputs as fixtures under `tests/fixtures/llamacpp/<commit>/`.
+- **Never guess llama.cpp behaviour.** Check a real binary (`--help`, an actual request) and store new outputs as fixtures under `tests/fixtures/llamacpp/<commit>/`. Fixtures are kept byte-exact: the whitespace and end-of-file hooks skip `tests/fixtures/` and the vendored `src/llmbench/serve/static/`.
 - **Tests never touch the network or the real `$LLB_HOME`/`HF_HOME`.** The autouse fixtures in `tests/conftest.py` set `HF_HUB_OFFLINE=1` and temporary homes. Use the fakes: `tests/fixtures/bin/fake-llama-bench`, `fake-llama-server`, `fake-lm_eval`, and `FakeHub` in `tests/helpers.py`.
 - **Peak memory comes from `VmHWM`**, never `ru_maxrss` (ADR-0012). The server binds to `127.0.0.1` only (PRD §37).
 - **Hugging Face cache deletion goes only through `huggingface_hub`'s revision API** (ADR-0010). Never delete blobs by hand.
@@ -82,6 +89,12 @@ Do this at the end of a feature, phase or fix batch, once every check passes:
    - `docs: …` with the documentation updates;
    - `chore(release): X.Y.Z` with the CHANGELOG and README.
 5. **Tag** it, annotated: `git tag -a vX.Y.Z -m "vX.Y.Z: <one line>"`.
+6. **Publish** (only when the maintainer asks): `git push origin main vX.Y.Z`. The tag triggers `.github/workflows/release.yml`, which:
+   - runs every CI check again on the tagged commit;
+   - fails if the tag is not `v` + the `pyproject.toml` version, or if CHANGELOG.md has no `## [X.Y.Z]` section;
+   - creates the GitHub Release, titled with the tag message, with that CHANGELOG section as notes and the wheel and sdist attached.
+
+   A version with a pre-release suffix (`1.0.0-rc.1`) is published as a pre-release. If any check fails, nothing is published: fix it, then move the tag to the fixed commit (`git tag -fa`, then `git push --force origin vX.Y.Z`; this is the only time a pushed ref may be rewritten).
 
 ## Documentation to update with every change
 

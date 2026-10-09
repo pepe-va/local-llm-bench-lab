@@ -9,6 +9,7 @@
 !/.python-version
 !/CHANGELOG.md
 !/README.md
+!/LICENSE
 !/experiments/
 !/models/
 !/pyproject.toml
