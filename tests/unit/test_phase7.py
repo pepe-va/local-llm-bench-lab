@@ -1,14 +1,16 @@
 """Serving plan and metrics, lm-eval adapter, LLM judge."""
 
 import json
+from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
 
 from llmbench.config.experiment import Experiment, JudgePhase, LmEvalPhase
+from llmbench.config.llama import LlamaConfig
 from llmbench.engine.judge import _parse, prompt, schema  # pyright: ignore[reportPrivateUsage]
 from llmbench.engine.phases.lm_eval import flatten_results, lm_eval_argv
-from llmbench.engine.planner import make_plan
+from llmbench.engine.planner import context_warnings, make_plan, slot_context
 from llmbench.results.models import RequestResult
 from llmbench.results.stats import serving_metrics
 
@@ -43,6 +45,55 @@ def test_serving_plan_runs_one_level_each_with_enough_slots(tmp_path: Path) -> N
     assert {r.config.server.parallel for r in p.serving_runs} == {8}  # raised from 2
     assert p.servers == 1
     assert p.requests("serving") == 120
+
+
+def fit_experiment(tmp_path: Path, defaults: Mapping[str, object]) -> Experiment:
+    (tmp_path / "big.yaml").write_text(
+        "name: big\nsource: {synthetic: {prompt_tokens: 900, output_tokens: 200, count: 3}}\n"
+    )
+    return Experiment.model_validate(
+        {
+            "experiment": {"name": "t"},
+            "llama_cpp": {"builds": [{"id": "b", "bin_dir": "/x"}]},
+            "models": [{"id": "m", "source": "m.gguf"}],
+            "defaults": defaults,
+            "phases": {
+                "bench": {"enabled": False},
+                "latency": {"enabled": True, "suites": [str(tmp_path / "big.yaml")]},
+                "serving": {
+                    "enabled": True,
+                    "suites": [str(tmp_path / "big.yaml")],
+                    "concurrency": [1, 4],
+                    "requests": 8,
+                },
+            },
+        }
+    )
+
+
+def test_context_warnings_follow_slots(tmp_path: Path) -> None:
+    # 1100 tokens per request: fits 4096 with one slot (latency), not 4096 / 4 (serving)
+    warnings = context_warnings(make_plan(fit_experiment(tmp_path, {"load": {"ctx_size": 4096}})))
+    assert warnings == [
+        "serving · big: 8 of 8 request(s) need more than the 1024 tokens of a llama-server "
+        "slot (ctx_size 4096 / 4 slot(s)), up to 1100. Raise load.ctx_size or set kv.unified."
+    ]  # one message for both concurrency levels
+    fits: list[Mapping[str, object]] = [
+        {"load": {"ctx_size": 8192}},
+        {"load": {"ctx_size": 4096}, "kv": {"unified": True}},
+        {},  # no ctx_size: llama.cpp decides
+    ]
+    for ok in fits:
+        assert context_warnings(make_plan(fit_experiment(tmp_path, ok))) == [], ok
+
+
+def test_slot_context() -> None:
+    def cfg(d: dict[str, object]) -> LlamaConfig:
+        return LlamaConfig.model_validate(d)
+
+    assert slot_context(cfg({"load": {"ctx_size": 8192}, "server": {"parallel": 8}})) == 1024
+    assert slot_context(cfg({"load": {"ctx_size": 0}})) is None
+    assert slot_context(cfg({"load": {"ctx_size": 4096}, "server": {"parallel": None}})) is None
 
 
 def test_lm_eval_runs_skip_specialised_models(tmp_path: Path) -> None:

@@ -61,6 +61,18 @@ def sample(dist: Distribution, rng: random.Random) -> int:
             return min(dist.max, value) if dist.max is not None else value
 
 
+def shapes(spec: Synthetic) -> list[tuple[int, int]]:
+    """(prompt tokens, output tokens) of every request, BOS included, without a tokenizer."""
+    return _shapes(spec, random.Random(spec.seed))
+
+
+def _shapes(spec: Synthetic, rng: random.Random) -> list[tuple[int, int]]:
+    return [
+        (sample(spec.prompt_tokens, rng), sample(spec.output_tokens, rng))
+        for _ in range(spec.count)
+    ]
+
+
 def build(
     spec: Synthetic,
     *,
@@ -69,11 +81,8 @@ def build(
     suite: str,
 ) -> list[Request]:
     rng = random.Random(spec.seed)
-    shapes = [
-        (sample(spec.prompt_tokens, rng), sample(spec.output_tokens, rng))
-        for _ in range(spec.count)
-    ]
-    longest = max(n for n, _ in shapes)
+    sizes = _shapes(spec, rng)  # same draws as `shapes()`; offsets continue from this rng
+    longest = max(n for n, _ in sizes)
 
     n_words = max(256, longest * 2)
     tokens = tokenize(corpus_text(spec.corpus, n_words, spec.seed))
@@ -82,7 +91,7 @@ def build(
         tokens = tokenize(corpus_text(spec.corpus, n_words, spec.seed))
 
     requests: list[Request] = []
-    for i, (n_in, n_out) in enumerate(shapes):
+    for i, (n_in, n_out) in enumerate(sizes):
         body = n_in - len(bos)
         if body < 1:
             raise ValueError(f"prompt_tokens={n_in} leaves no room after the BOS token")

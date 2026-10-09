@@ -5,7 +5,7 @@ from rich.table import Table
 
 from llmbench.cli.common import ExperimentArg, console, fail, load
 from llmbench.config.matrix import variant_label
-from llmbench.engine.planner import Plan, RunSpec, make_plan
+from llmbench.engine.planner import Plan, RunSpec, context_warnings, make_plan
 from llmbench.engine.runtime import output_dir
 from llmbench.results.models import Phase
 
@@ -22,6 +22,7 @@ def plan(experiment: ExperimentArg, model: ModelOpt = None) -> None:
     except ValueError as e:
         fail(str(e))
     print_plan(p, exp.experiment.name, str(output_dir(exp)))
+    print_warnings(p)
     if p.variants > 1:
         t = Table("#", "variant", title="Matrix", title_justify="left", box=None)
         seen: list[str] = []
@@ -31,6 +32,11 @@ def plan(experiment: ExperimentArg, model: ModelOpt = None) -> None:
                 seen.append(label)
                 t.add_row(str(len(seen)), label)
         console.print(t)
+
+
+def print_warnings(p: Plan) -> None:
+    for w in context_warnings(p):
+        console.print(f"[yellow]warning[/]: {w}", highlight=False)
 
 
 def print_plan(p: Plan, name: str, out: str) -> None:

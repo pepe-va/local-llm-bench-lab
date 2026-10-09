@@ -4,7 +4,7 @@ from typing import Annotated
 import typer
 
 from llmbench.cli.common import ExperimentArg, console, fail, load
-from llmbench.cli.plan import ModelOpt, print_plan
+from llmbench.cli.plan import ModelOpt, print_plan, print_warnings
 from llmbench.config.experiment import Experiment
 from llmbench.config.matrix import variant_label
 from llmbench.engine.env import PreflightError
@@ -136,6 +136,7 @@ def run(
     except ValueError as e:
         fail(str(e))
     print_plan(p, exp.experiment.name, str(output_dir(exp)))
+    print_warnings(p)
     if not p.runs:
         fail("nothing to run (no enabled models or bench phase disabled)")
     if not yes and not typer.confirm("Start?", default=True):

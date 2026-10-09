@@ -5,7 +5,7 @@ from llmbench.cli.common import ExperimentArg, console, fail, load
 from llmbench.config.llama import LlamaConfig
 from llmbench.config.loader import load_suite
 from llmbench.config.matrix import apply_variant
-from llmbench.engine.planner import make_plan
+from llmbench.engine.planner import context_warnings, make_plan
 from llmbench.hub.store import ModelNotFoundError, ModelStore
 from llmbench.llamacpp import builds
 from llmbench.llamacpp.argv import Argv, bench_argv, server_argv
@@ -54,7 +54,8 @@ def validate(experiment: ExperimentArg) -> None:
         for tool, make in tools:
             problems += _check_tool(rb, tool, make, variants)
 
-    make_plan(exp)
+    for w in context_warnings(make_plan(exp)):
+        console.print(f"[yellow]![/] {w}", highlight=False)
     if problems:
         fail(f"{problems} problem(s) found", code=1)
     console.print("[green]valid[/]")

@@ -268,8 +268,11 @@ def test_validate_checks_server_flags(tmp_path: Path, fake_bin_dir: Path, tiny_m
     assert "suite syn" in out(r)
 
 
-def test_validate_covers_serving(tmp_path: Path, fake_bin_dir: Path, tiny_model: Path) -> None:
-    exp = latency_experiment(tmp_path, fake_bin_dir, tiny_model)
+def test_validate_and_plan_cover_serving(
+    tmp_path: Path, fake_bin_dir: Path, tiny_model: Path
+) -> None:
+    extra = "defaults: {load: {ctx_size: 150}}"  # 50 tokens per slot; syn needs up to 61
+    exp = latency_experiment(tmp_path, fake_bin_dir, tiny_model, extra)
     exp.write_text(
         exp.read_text().replace(
             "  latency: {enabled: true, suites: [suites/syn.yaml], passes: 2, warmup_requests: 1}",
@@ -277,9 +280,15 @@ def test_validate_covers_serving(tmp_path: Path, fake_bin_dir: Path, tiny_model:
         )
     )
     r = runner.invoke(app, ["validate", str(exp)])
-    assert r.exit_code == 0, out(r)
+    assert r.exit_code == 0, out(r)  # a warning, not a failure
     assert "suite syn" in out(r)
     assert "all llama-server flags supported" in out(r)
+    assert "serving · syn:" in out(r)
+    assert "2 of 4 request(s) need more than the 50 tokens" in out(r)
+    assert "(ctx_size 150 / 3 slot(s)), up to 61" in out(r)
+
+    r = runner.invoke(app, ["plan", str(exp)])
+    assert "warning: serving · syn:" in out(r)
 
 
 def test_quality_run_scores_chat_answers(

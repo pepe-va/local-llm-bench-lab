@@ -133,7 +133,8 @@ def test_exact_prompt_lengths_with_bos() -> None:
         (synthetic.sample(spec.prompt_tokens, rng), synthetic.sample(spec.output_tokens, rng))
         for _ in range(25)
     ]
-    assert [len(r.prompt) for r in reqs] == [n for n, _ in shapes]  # BOS counted in the total
+    assert synthetic.shapes(spec) == shapes  # known without a tokenizer
+    assert [(len(r.prompt), r.n_predict) for r in reqs] == shapes  # BOS counted in the total
     assert all(50 <= len(r.prompt) <= 300 for r in reqs)
     assert all(isinstance(r.prompt, list) and r.prompt[0] == 1 for r in reqs)
     assert {r.n_predict for r in reqs} == {32}

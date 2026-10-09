@@ -16,6 +16,7 @@ from llmbench.config.llama import LlamaConfig
 from llmbench.config.loader import load_suite
 from llmbench.config.matrix import Variant, apply_variant
 from llmbench.config.suite import Suite
+from llmbench.data import synthetic
 from llmbench.results.models import Phase
 
 # Fields that do not change what is measured, so they stay out of the fingerprint.
@@ -260,6 +261,55 @@ def suite_fingerprint(
             ),
         }
     )
+
+
+def slot_context(cfg: LlamaConfig) -> int | None:
+    """Tokens one request can use in llama-server, or None if only llama.cpp knows.
+
+    Without unified KV each slot gets `ctx_size / parallel`; with it, a request may use the
+    whole context. No `ctx_size`, `ctx_size: 0` (the model's own) or automatic slots: unknown.
+    """
+    ctx, parallel = cfg.load.ctx_size, cfg.server.parallel
+    if not ctx:
+        return None
+    if cfg.kv.unified:
+        return ctx
+    return ctx // parallel if parallel else None
+
+
+def context_warnings(plan: Plan) -> list[str]:
+    """Synthetic requests whose prompt plus output cannot fit in one llama-server slot.
+
+    Synthetic shapes are seeded, so this is known before anything runs. Items, files and
+    datasets are not checked: their token counts depend on the model's tokenizer.
+    """
+    out: list[str] = []
+    for r in plan.server_runs:
+        spec = r.suite.source.synthetic if r.suite else None
+        slot = slot_context(r.config)
+        if r.suite is None or spec is None or slot is None:
+            continue
+        sizes = [p + o for p, o in synthetic.shapes(spec)]
+        n = len(sizes) * plan.passes.get(r.phase, 1)
+        if r.phase == "serving" and plan.serving_requests:
+            n = plan.serving_requests
+        over = [x for x in (sizes[i % len(sizes)] for i in range(n)) if x > slot]
+        if not over:
+            continue
+        cfg = r.config
+        how = (
+            f"ctx_size {cfg.load.ctx_size}, unified KV"
+            if cfg.kv.unified
+            else f"ctx_size {cfg.load.ctx_size} / {cfg.server.parallel} slot(s)"
+        )
+        msg = (
+            f"{r.phase} · {r.suite.name}: {len(over)} of {n} request(s) need more than the "
+            f"{slot} tokens of a llama-server slot ({how}), up to {max(over)}. "
+            "Raise load.ctx_size or set kv.unified."
+        )
+        if msg not in out:
+            out.append(msg)
+    return out
 
 
 def suite_size(suite: Suite | None) -> int | None:
