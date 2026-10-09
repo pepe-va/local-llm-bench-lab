@@ -155,6 +155,31 @@ def test_hf_model_is_downloaded_once_and_released(
     assert model["gguf"]["architecture"] == "llama"
 
 
+@pytest.mark.parametrize(
+    ("machine", "own", "removed"),
+    [
+        ("delete_after_run", "", True),
+        ("delete_after_run", ", retention: keep", False),
+        ("keep", "", False),
+        ("keep", ", retention: delete_after_run", True),
+    ],
+)
+def test_machine_retention_applies_unless_the_model_sets_its_own(
+    tmp_path: Path, fake_bin_dir: Path, hub: FakeHub, *, machine: str, own: str, removed: bool
+) -> None:
+    exp = experiment(tmp_path, fake_bin_dir, Path("x"))
+    exp.write_text(
+        exp.read_text()
+        .replace("source: x", f"source: 'hf://unsloth/Qwen3-1.7B-GGUF:Q4_K_M'{own}")
+        .replace("kv.cache_type_k: [f16, q4_0]", "kv.cache_type_k: [f16]")
+        .replace("hardware:\n", f"hardware:\n  model_retention: {machine}\n")
+    )
+    r = runner.invoke(app, ["run", "-y", str(exp)])
+    assert r.exit_code == 0, out(r)
+    assert ("removed from the HF cache" in out(r)) is removed
+    assert (hub.cached_files() == []) is removed
+
+
 def test_models_cli(tmp_path: Path, hub: FakeHub) -> None:
     ref = "hf://unsloth/Qwen3-1.7B-GGUF:Q4_K_M"
     r = runner.invoke(app, ["models", "pull", ref])

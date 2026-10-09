@@ -10,9 +10,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - `hardware.model_retention` (`keep` by default, or `delete_after_run`) sets the retention of every model that does not set its own `retention`, so the machine profile decides whether downloaded models stay in the Hugging Face cache.
 - Release workflow (`.github/workflows/release.yml`). Pushing a `vX.Y.Z` tag runs every CI check on the tagged commit. If they pass, it publishes the GitHub Release, with the matching CHANGELOG section as notes and the wheel and sdist attached. It refuses a tag that does not match the `pyproject.toml` version or has no CHANGELOG section (ADR-0021).
 - A pre-push hook runs the tests. `uv run pre-commit install` sets it up together with the pre-commit hook.
+- `llb serve` compares experiments: tick several on the index page to open `/compare`, which lists every configuration side by side with its key metrics, shows the machine of each experiment (differences highlighted), plots any metric, and shows each row as a percentage of a chosen baseline.
+- The experiment page of `llb serve` has a **plan** section (models, llama.cpp builds, matrix, phases with their tests, repetitions and suites, and every llama.cpp setting applied, split into common and varying, with a short meaning) and a **hardware** section (machine snapshot, and RAM, CPU clock, CPU time, temperature and cooldown of every run).
+- The run page of `llb serve` plots every llama-bench repetition, and shows the machine, model, build and resources as readable lists (the raw JSON stays available).
+- Every table of `llb serve` can be sorted by any column and filtered (`-word` excludes); the live runs table keeps its order and filter across refreshes.
+- Every chart explains what it shows and how to read it, in `llb serve` and in the HTML report. A new "Peak memory" chart shows the peak RSS of each configuration.
 
 ### Changed
 
+- `llb serve` has a terminal-style look: dark background, monospace font, a prompt-like path bar and section navigation.
+- The llama-bench chart has one panel per test (pp and tg have very different scales), shorter bar labels (parts common to every configuration are dropped) and a hover box with the full configuration, 95% CI and cv.
 - The `pi5` profile sets `model_retention: delete_after_run`: every Pi experiment now removes each downloaded model from the HF cache after its last run, not only the first three models of `quantization.yaml`. The `pc` profile sets `keep`. A model can still opt out with `retention: keep`, and favorites in `models/` are never deleted.
 - CI now runs the pre-commit hooks (file hygiene, lockfile, ruff, basedpyright) as well as the tests on x86_64 and arm64. Until now it skipped the file-hygiene hooks.
 - The pre-commit hooks run ruff and uv through `uv run`, with the versions locked in `uv.lock`. Before, they used older pinned copies (ruff 0.12, uv 0.8). Real tool outputs under `tests/fixtures/` and the vendored htmx are excluded from the whitespace hooks, so they stay byte-exact.
@@ -237,16 +244,16 @@ Phase 0: project skeleton.
 - ruff, basedpyright (strict), pytest, pre-commit, and GitHub Actions on x86_64 and arm64.
 - Project proposal (`docs/PRD.md`) and plan (`docs/PLAN.md`).
 
-[Unreleased]: /compare/v0.11.0...HEAD
-[0.11.0]: /compare/v0.10.0...v0.11.0
-[0.10.0]: /compare/v0.9.1...v0.10.0
-[0.9.1]: /compare/v0.9.0...v0.9.1
-[0.9.0]: /compare/v0.8.0...v0.9.0
-[0.8.0]: /compare/v0.7.0...v0.8.0
-[0.7.0]: /compare/v0.6.0...v0.7.0
-[0.6.0]: /compare/v0.5.0...v0.6.0
-[0.5.0]: /compare/v0.4.0...v0.5.0
-[0.4.0]: /compare/v0.3.0...v0.4.0
-[0.3.0]: /compare/v0.2.0...v0.3.0
-[0.2.0]: /compare/v0.1.0...v0.2.0
-[0.1.0]: /releases/tag/v0.1.0
+[Unreleased]: https://github.com/pepe-va/local-llm-bench-lab/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/pepe-va/local-llm-bench-lab/compare/v0.10.0...v0.11.0
+[0.10.0]: https://github.com/pepe-va/local-llm-bench-lab/compare/v0.9.1...v0.10.0
+[0.9.1]: https://github.com/pepe-va/local-llm-bench-lab/compare/v0.9.0...v0.9.1
+[0.9.0]: https://github.com/pepe-va/local-llm-bench-lab/compare/v0.8.0...v0.9.0
+[0.8.0]: https://github.com/pepe-va/local-llm-bench-lab/compare/v0.7.0...v0.8.0
+[0.7.0]: https://github.com/pepe-va/local-llm-bench-lab/compare/v0.6.0...v0.7.0
+[0.6.0]: https://github.com/pepe-va/local-llm-bench-lab/compare/v0.5.0...v0.6.0
+[0.5.0]: https://github.com/pepe-va/local-llm-bench-lab/compare/v0.4.0...v0.5.0
+[0.4.0]: https://github.com/pepe-va/local-llm-bench-lab/compare/v0.3.0...v0.4.0
+[0.3.0]: https://github.com/pepe-va/local-llm-bench-lab/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/pepe-va/local-llm-bench-lab/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/pepe-va/local-llm-bench-lab/releases/tag/v0.1.0

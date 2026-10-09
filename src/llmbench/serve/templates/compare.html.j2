@@ -1,0 +1,72 @@
+{% extends "base.html.j2" %}
+{% block title %}compare · llb{% endblock %}
+{% block crumbs %}/compare{% endblock %}
+{% block head %}<script src="/static/plotly.min.js"></script>{% endblock %}
+{% block body %}
+<h1>diff {% for s in selected %}{{ s.experiment }}{% if not loop.last %} {% endif %}{% endfor %}<span class="cursor"></span></h1>
+<p class="meta">{{ rows | length }} configurations from {{ selected | length }} experiment{{ 's' if selected | length != 1 }} · <a href="/">← pick other experiments</a></p>
+
+<div class="cards">
+  {% for s in selected %}<div class="card"><b><a href="/e/{{ s.sid }}/{{ s.experiment }}">{{ s.experiment }}</a></b><span>{{ s.configs }} configurations · {{ s.env.get('CPU', '?') }}</span></div>{% endfor %}
+</div>
+
+<nav class="sections"><a href="#machines">machines</a><a href="#chart">chart</a><a href="#configurations">configurations</a></nav>
+
+<h2 id="machines">machines</h2>
+<p class="help">Where each experiment ran. Values that differ between experiments are in <span class="warn">amber</span>: results from different machines or llama.cpp versions are not directly comparable.</p>
+<div class="wrap"><table>
+  <thead><tr><th></th>{% for s in selected %}<th>{{ s.experiment }}</th>{% endfor %}</tr></thead>
+  <tbody>{% for k, differs in env_keys %}
+  <tr><td class="dim">{{ k }}</td>{% for s in selected %}<td class="{{ 'warn' if differs else '' }}">{{ s.env.get(k, '-') }}</td>{% endfor %}</tr>
+  {% endfor %}</tbody>
+</table></div>
+
+<h2 id="chart">chart</h2>
+<p class="help">Pick a metric to plot every configuration side by side, coloured by experiment. Hover a bar for the full configuration.</p>
+<div class="toolbar">
+  <label class="dim" for="cmp-metric">metric</label>
+  <select id="cmp-metric" class="filter" style="flex:0 0 auto">{% for key, header, better in columns %}<option value="{{ key }}" data-better="{{ better }}">{{ header }} ({{ better }} is better)</option>{% endfor %}</select>
+</div>
+<div class="chart"><div id="cmp-chart" style="height:440px"></div></div>
+
+<h2 id="configurations">configurations</h2>
+<p class="help">Choose a <b>baseline</b> row (radio button) to see every other row as a percentage of it: <span class="ok">green</span> = better, <span class="ko">red</span> = worse (for t/s higher is better, for latency and memory lower is better). Sort by any column; filter with words (<code>-word</code> excludes).</p>
+<div class="toolbar"><input class="filter" data-filter="t-compare" placeholder="filter: experiment, model, quant…" aria-label="filter"><span class="count" data-count="t-compare"></span></div>
+<div class="wrap"><table class="sortable" id="t-compare">
+  <thead><tr><th class="nosort">base</th><th>experiment</th><th>model</th><th>quant</th><th>variant</th><th>build</th>{% for key, header, better in columns %}<th class="num" title="{{ better }} is better">{{ header }}</th>{% endfor %}<th class="num">failed</th></tr></thead>
+  <tbody>{% for r in rows %}<tr>
+    <td><input type="radio" name="baseline" aria-label="baseline"{% if loop.first %} checked{% endif %}></td>
+    <td><a href="/e/{{ r.sid }}/{{ r.experiment }}">{{ r.experiment }}</a></td><td>{{ r.model }}</td><td class="warn">{{ r.quant | fmt }}</td><td>{{ r.variant }}</td><td class="muted">{{ r.build }}</td>
+    {% for key, header, better in columns %}{% set v = r.metrics.get(key) %}<td class="num" data-metric="{{ key }}" data-better="{{ better }}" data-v="{{ v if v is not none else '' }}">{{ v | fmt(2) }}</td>{% endfor %}
+    <td class="num {{ 'ko' if r.failed else 'muted' }}">{{ r.failed }}</td>
+  </tr>{% endfor %}</tbody>
+</table></div>
+
+<script>
+(() => {
+  const rows = {{ rows | tojson }};
+  const exps = [...new Set(rows.map((r) => r.experiment))];
+  const colors = ["#4ade80", "#fbbf24", "#22d3ee", "#f472b6", "#a78bfa", "#fb923c", "#94a3b8"];
+  const mono = 'ui-monospace, "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace';
+  const sel = document.getElementById("cmp-metric");
+  const label = (r) => `${r.model} · ${r.variant}`;
+  function draw() {
+    const key = sel.value, opt = sel.selectedOptions[0];
+    const traces = exps.map((e, i) => {
+      const rs = rows.filter((r) => r.experiment === e && r.metrics[key] != null);
+      return { type: "bar", name: e, x: rs.map((r) => `${e}<br>${label(r)}`), y: rs.map((r) => r.metrics[key]),
+               marker: { color: colors[i % colors.length] }, hovertemplate: "%{x}<br>%{y:.2f}<extra></extra>" };
+    });
+    const grid = "#1e2a22";
+    Plotly.react("cmp-chart", traces, {
+      paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: { family: mono, color: "#b8c4bb", size: 12 },
+      margin: { t: 30, l: 60, r: 20, b: 140 }, legend: { orientation: "h", y: 1.1 },
+      xaxis: { gridcolor: grid, tickangle: -25, tickfont: { size: 10 } },
+      yaxis: { gridcolor: grid, zerolinecolor: grid, title: opt ? opt.textContent : "" },
+      hoverlabel: { font: { family: mono }, bgcolor: "#0d1310", bordercolor: "#4ade80" },
+    }, { displaylogo: false, responsive: true });
+  }
+  if (sel.options.length) { sel.addEventListener("change", draw); draw(); }
+})();
+</script>
+{% endblock %}

@@ -103,7 +103,7 @@ You need:
 sudo apt install git cmake build-essential            # llama.cpp build tools (Debian/Ubuntu/Raspberry Pi OS)
 curl -LsSf https://astral.sh/uv/install.sh | sh       # if you don't have uv
 
-git clone .git local-llm-bench-lab
+git clone https://github.com/pepe-va/local-llm-bench-lab.git
 cd local-llm-bench-lab
 uv sync --extra report --extra serve                  # with HTML reports and the dashboard
 uv run llb doctor
@@ -229,7 +229,7 @@ Run `llb validate <yaml>` after each change: it points at the exact field that i
 | `llb report <yaml> [-f html -f md -f png]` | Builds reports from stored results |
 | `llb guide <yaml>` | Applies the gates, picks the winner and writes `guidance.md`. Exits with 1 if nothing passes. |
 | `llb judge <yaml>` | Runs the LLM judge over pending answers |
-| `llb serve` | Starts the read-only web dashboard |
+| `llb serve` | Starts the read-only web dashboard: compare experiments, see each one's plan, hardware, explained charts and runs, sort and filter every table |
 | `llb llama build --ref <tag> [--backend cuda]` / `llama ls` | Compiles llama.cpp and lists the builds |
 | `llb models pull\|ls\|inspect\|favorite\|unfavorite\|prune` | Manages GGUF models |
 | `llb doctor` | Shows the environment |

@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from llmbench.config.experiment import Experiment, ModelSpec
+from llmbench.config.experiment import Experiment, ModelSpec, Retention
 from llmbench.engine import env as envmod
 from llmbench.engine.judge import run_judge
 from llmbench.engine.phases.bench import run_bench_spec
@@ -40,13 +40,21 @@ class _Models:
     """Resolve each model right before its first run and release it after its last.
 
     On a Pi with little disk this keeps at most one downloaded model around when
-    `retention: delete_after_run` is set.
+    the retention is `delete_after_run` (the model's own, or else `hardware.model_retention`).
     """
 
-    def __init__(self, plan: Plan, store: Store, models: ModelStore, events: Events) -> None:
+    def __init__(
+        self,
+        plan: Plan,
+        store: Store,
+        models: ModelStore,
+        events: Events,
+        default_retention: Retention = "keep",
+    ) -> None:
         self._store = store
         self._models = models
         self._events = events
+        self._default_retention: Retention = default_retention
         self._cache: dict[str, ModelHandle | None] = {}
         self._last: dict[str, int] = {r.model.id: i for i, r in enumerate(plan.runs)}
 
@@ -57,7 +65,8 @@ class _Models:
 
     def done_with(self, index: int, spec: ModelSpec) -> None:
         model = self._cache.get(spec.id)
-        if model is None or self._last[spec.id] != index or spec.retention != "delete_after_run":
+        retention = spec.retention or self._default_retention
+        if model is None or self._last[spec.id] != index or retention != "delete_after_run":
             return
         freed = self._models.release(model.resolved)
         if freed:
@@ -123,7 +132,13 @@ def execute(
     try:
         ctx = RunContext(exp, store, events, envmod.snapshot(), out, resume)
         resolved = _resolve_builds(exp, plan, events, auto_build=auto_build)
-        models = _Models(plan, store, model_store or ModelStore(log=events.log), events)
+        models = _Models(
+            plan,
+            store,
+            model_store or ModelStore(log=events.log),
+            events,
+            exp.hardware.model_retention,
+        )
         total = len(plan.runs)
         for i, spec in enumerate(plan.runs, 1):
             status = _dispatch(

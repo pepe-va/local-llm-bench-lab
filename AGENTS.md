@@ -12,7 +12,7 @@ Instructions for AI coding agents (and humans) working on **local-llm-bench-lab*
 | [docs/MODELS.md](docs/MODELS.md) | Config/runtime/result classes, YAML → flag tables, SQLite schema, fingerprints |
 | [docs/adr/](docs/adr/README.md) | Why things are the way they are. Check before contradicting a decision. |
 | [CHANGELOG.md](CHANGELOG.md) | What changed in each version |
-| [docs/PLAN.md](docs/PLAN.md), [docs/PRD.md](docs/PRD.md) | Original plan and proposal (historical) |
+| [docs/manuals/PLAN.md](docs/manuals/PLAN.md), [docs/manuals/PRD.md](docs/manuals/PRD.md) | Original plan and proposal (historical, private) |
 
 ## Commands
 
@@ -112,7 +112,7 @@ Do this at the end of a feature, phase or fix batch, once every check passes:
 
 ## Local paths
 
-- The repository directory is currently `local-llm-bech-lab` (sic). Do not create a sibling `local-llm-bench-lab/` by typing the "correct" name; double-check absolute paths.
+- The repository is https://github.com/pepe-va/local-llm-bench-lab and the working copy is `local-llm-bench-lab/`. Double-check absolute paths before creating files outside it.
 - Heavy data never goes into git:
   - builds, sources and results live under `$LLB_HOME` (default `~/.local/share/llmbench`);
   - models live in the Hugging Face cache, or in `models/` for favorites (gitignored).

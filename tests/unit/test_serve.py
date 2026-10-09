@@ -1,5 +1,6 @@
 """`llb serve` dashboard (FastAPI TestClient over a temporary store)."""
 
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -77,6 +78,40 @@ def test_experiment_runs_and_run_pages(client: TestClient) -> None:
 def test_static_assets_are_served_offline(client: TestClient) -> None:
     assert "htmx" in client.get("/static/htmx.min.js").text[:200]
     assert len(client.get("/static/plotly.min.js").content) > 1_000_000
+    assert "sortTable" in client.get("/static/llb.js").text
+
+
+def test_experiment_page_shows_plan_hardware_and_explained_charts(client: TestClient) -> None:
+    sid = client.get("/api/experiments").json()[0]["sid"]
+    page = client.get(f"/e/{sid}/exp").text
+    assert 'id="plan"' in page
+    assert 'id="hardware"' in page
+    assert "load.threads" in page  # effective llama.cpp settings
+    assert "CPU threads used to generate tokens" in page  # ...with their meaning
+    assert "Cortex-A76" in page  # machine
+    assert "95% bootstrap confidence interval" in page  # chart explanation
+    assert 'class="sortable" id="t-bench"' in page
+    assert 'data-filter="t-runs"' in page  # filter outside the polled fragment
+
+
+def test_compare_two_experiments(results: Path) -> None:
+    from llmbench.results.store import Store  # noqa: PLC0415
+
+    store = Store(results / "other" / "benchmark.sqlite")
+    m = Measurement("tg", 0, 128, 0, 19.0, 0.2, 1, 1, [19.0], {}, 19.0, 0.01, False)
+    run = record("o", {}, "bench", measurements=[m])
+    store.save_run(replace(run, experiment="other", env={"cpu_model": "Ryzen", "os": "Debian"}))
+    store.close()
+    client = TestClient(create_app([results]))
+    exps = {e["experiment"]: e["sid"] for e in client.get("/api/experiments").json()}
+    r = client.get("/compare", params={"e": [f"{exps['exp']}/exp", f"{exps['other']}/other"]})
+    assert r.status_code == 200
+    assert "tg128 t/s" in r.text
+    assert 'data-metric="tg128"' in r.text
+    assert 'data-v="19.0"' in r.text
+    assert "Cortex-A76" in r.text
+    assert 'class="warn">Ryzen' in r.text  # the machines differ
+    assert client.get("/compare", params={"e": "nope/exp"}).status_code == 404
 
 
 def test_unknown_things_are_404(client: TestClient) -> None:
@@ -95,4 +130,4 @@ def test_gates_shown_when_experiment_yaml_given(results: Path, tmp_path: Path) -
     )
     client = TestClient(create_app([results], [exp]))
     sid = client.get("/api/experiments").json()[0]["sid"]
-    assert "Gates" in client.get(f"/e/{sid}/exp").text
+    assert 'id="gates"' in client.get(f"/e/{sid}/exp").text

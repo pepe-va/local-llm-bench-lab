@@ -1,11 +1,12 @@
-<div class="wrap"><table>
-  <tr><th>#</th><th>phase</th><th>status</th><th>model</th><th>variant</th><th>suite</th><th>key result</th><th>started</th><th>duration</th></tr>
+<div class="wrap"><table class="sortable" id="t-runs">
+  <thead><tr><th class="num">#</th><th>phase</th><th>status</th><th>model</th><th>variant</th><th>suite</th><th>key result</th><th>started (UTC)</th><th class="num">duration</th></tr></thead>
+  <tbody>
   {% for r in runs %}
   <tr>
-    <td><a href="/run/{{ sid }}/{{ r.id }}">{{ r.id }}</a></td><td>{{ r.phase }}{% if r.concurrency %} · c={{ r.concurrency }}{% endif %}</td>
+    <td class="num"><a href="/run/{{ sid }}/{{ r.id }}">{{ r.id }}</a></td><td>{{ r.phase }}{% if r.concurrency %} · c={{ r.concurrency }}{% endif %}</td>
     <td class="{{ 'ok' if r.status == 'completed' else 'ko' }}">{{ r.status }}</td>
     <td>{{ r.model_id }}</td>
-    <td>{% for k, v in r.variant.items() %}{{ k }}={{ v }} {% endfor %}</td>
+    <td>{% for k, v in r.variant.items() %}<span class="tag v">{{ k }}={{ v }}</span>{% else %}<span class="muted">defaults</span>{% endfor %}</td>
     <td>{{ r.suite or '' }}</td>
     <td>
       {% if r.measurements %}{% for m in r.measurements %}{{ m.label }} {{ m.avg_ts | fmt }} t/s{% if not loop.last %} · {% endif %}{% endfor %}
@@ -15,7 +16,8 @@
       {% elif r.metrics.get('ttft_ms_p50') is not none %}TTFT p50 {{ r.metrics.ttft_ms_p50 | fmt }} ms
       {% elif r.error %}<span class="ko">{{ r.error.splitlines()[0] }}</span>{% endif %}
     </td>
-    <td>{{ r.started_at }}</td><td class="num">{{ r.duration_s | fmt(1) }} s</td>
+    <td data-v="{{ r.started_at or '' }}">{{ (r.started_at or '-')[:19] | replace('T', ' ') }}</td><td class="num" data-v="{{ r.duration_s or '' }}">{{ r.duration_s | fmt(1) }} s</td>
   </tr>
   {% endfor %}
+  </tbody>
 </table></div>

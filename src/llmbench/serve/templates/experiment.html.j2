@@ -1,65 +1,190 @@
 {% extends "base.html.j2" %}
 {% block title %}{{ d.experiment }} · llb{% endblock %}
+{% block crumbs %}/experiments/{{ d.experiment }}{% endblock %}
 {% block head %}<script src="/static/plotly.min.js"></script>{% endblock %}
 {% block body %}
-<h1>{{ d.experiment }}</h1>
-<div class="muted">{% if d.machine %}{{ d.machine.cpu_model or d.machine.machine }} · {{ d.machine.os }} · {{ d.machine.cpu_count }} CPUs · {{ d.machine.ram_total_mb }} MB RAM{% endif %} · <code>{{ store.path }}</code></div>
+{% macro toolbar(id, placeholder) %}<div class="toolbar"><input class="filter" data-filter="{{ id }}" placeholder="{{ placeholder }}" aria-label="filter"><span class="count" data-count="{{ id }}"></span></div>{% endmacro %}
+<h1>{{ d.experiment }}<span class="cursor"></span></h1>
+<div class="meta">{% if d.machine %}<b>{{ d.machine.cpu_model or d.machine.machine }}</b> · {{ d.machine.cpu_count }} CPUs · {{ d.machine.ram_total_mb }} MB RAM · {{ d.machine.os }} · {% endif %}store <code>{{ store.path }}</code></div>
+
+{% set total_s = hw.usage | map(attribute='duration_s') | select | sum %}
 <div class="cards">
-  <div class="card"><b>{{ d.rows | length }}</b><span class="muted">configurations</span></div>
-  <div class="card"><b>{{ d.runs }}</b><span class="muted">runs</span></div>
-  <div class="card"><b class="{{ 'ko' if d.failures else '' }}">{{ d.failures | length }}</b><span class="muted">failed</span></div>
-  {% if d.verdicts %}<div class="card"><b>{{ d.verdicts | selectattr("passed") | list | length }} / {{ d.verdicts | length }}</b><span class="muted">pass all gates</span></div>{% endif %}
+  <div class="card"><b>{{ d.rows | length }}</b><span>configurations</span></div>
+  <div class="card"><b>{{ d.runs }}</b><span>runs (latest attempts)</span></div>
+  <div class="card"><b class="{{ 'ko' if d.failures else '' }}">{{ d.failures | length }}</b><span>failed</span></div>
+  <div class="card"><b>{{ (total_s / 60) | fmt(1) }} min</b><span>measured time</span></div>
+  {% for test in d.bench | map(attribute='test') | unique %}
+  {% set best = d.bench | selectattr('test', 'equalto', test) | sort(attribute='tps', reverse=True) | first %}
+  <div class="card hl" title="{{ best.config }}"><b>{{ best.tps | fmt(1) }}</b><span>best {{ test }} t/s · {{ best.model }}</span></div>
+  {% endfor %}
+  {% if d.verdicts %}<div class="card"><b>{{ d.verdicts | selectattr("passed") | list | length }} / {{ d.verdicts | length }}</b><span>pass all gates</span></div>{% endif %}
 </div>
 
-<h2 class="live">Latest runs</h2>
-<div hx-get="/e/{{ sid }}/{{ d.experiment }}/runs" hx-trigger="load, every 3s" hx-swap="innerHTML"><p class="muted">loading…</p></div>
+<nav class="sections">
+  <a href="#plan">plan</a><a href="#hardware">hardware</a>{% if d.verdicts %}<a href="#gates">gates</a>{% endif %}
+  {% if charts %}<a href="#charts">charts</a>{% endif %}
+  {% if d.bench %}<a href="#bench">bench</a>{% endif %}{% if d.latency %}<a href="#latency">latency</a>{% endif %}
+  {% if d.quality %}<a href="#quality">quality</a>{% endif %}{% if d.serving %}<a href="#serving">serving</a>{% endif %}
+  {% if d.lm_eval %}<a href="#lm-eval">lm-eval</a>{% endif %}{% if d.failures %}<a href="#failures">failures</a>{% endif %}
+  <a href="#runs">runs</a>
+</nav>
 
-{% if d.verdicts %}
-<h2>Gates</h2>
-<div class="wrap"><table>
-  <tr><th></th><th>configuration</th><th>values</th><th>failed because</th></tr>
-  {% for v in d.verdicts %}
-  <tr class="{{ 'winner' if d.winner is sameas v else '' }}"><td class="{{ 'ok' if v.passed else 'ko' }}">{{ '✓' if v.passed else '✗' }}{{ ' ★' if d.winner is sameas v else '' }}</td>
-    <td>{{ v.row.label }}</td><td class="wrapcell">{% for c in v.checks %}{{ c.text }}<br>{% endfor %}</td><td class="wrapcell">{{ v.reasons | join('; ') }}</td></tr>
-  {% endfor %}
+{# ------------------------------------------------------------------ plan #}
+<h2 id="plan">plan</h2>
+<p class="help">What this experiment measured, reconstructed from the stored runs: the models, the llama.cpp build, the <b>matrix</b> of values that change between configurations, the phases, and every llama.cpp setting that was applied.</p>
+<div class="grid2">
+  <div class="panel">
+    <h3 style="margin-top:0">matrix · {{ plan.combinations }} configuration{{ 's' if plan.combinations != 1 }}</h3>
+    {% if plan.matrix %}
+    <dl class="kv">{% for k, values in plan.matrix.items() %}<dt>{{ k }}</dt><dd>{% for v in values %}<span class="tag v">{{ v }}</span>{% endfor %}</dd>{% endfor %}</dl>
+    {% else %}<p class="dim" style="margin:0">No matrix: every model ran with the same settings. Configurations = models × builds.</p>{% endif %}
+  </div>
+  <div class="panel">
+    <h3 style="margin-top:0">phases</h3>
+    <dl class="kv">
+    {% for p in plan.phases %}
+      <dt>{{ p.phase }}</dt>
+      <dd>{{ p.runs }} run{{ 's' if p.runs != 1 }}{% if p.failed %} · <span class="ko">{{ p.failed }} failed</span>{% endif %} · {{ p.seconds | fmt(0) }} s
+        {% for t in p.tests %}<br><span class="dim">test</span> {{ t }}{% endfor %}
+        {% if p.repetitions %}<br><span class="dim">repetitions</span> {{ p.repetitions | join(', ') }}{% endif %}
+        {% if p.suites %}<br><span class="dim">suites</span> {{ p.suites | join(', ') }}{% endif %}
+        {% if p.concurrency %}<br><span class="dim">concurrency</span> {{ p.concurrency | join(', ') }}{% endif %}
+      </dd>
+    {% endfor %}
+    </dl>
+  </div>
+</div>
+
+<h3>models</h3>
+<div class="wrap"><table class="sortable" id="t-models">
+  <thead><tr><th>id</th><th>quant</th><th>arch</th><th class="num">params</th><th class="num">file GB</th><th class="num">ctx train</th><th class="num">layers</th><th>source</th><th>revision</th><th>sha256</th></tr></thead>
+  <tbody>{% for m in plan.models %}<tr><td>{{ m.id }}</td><td class="warn">{{ m.quant | fmt }}</td><td>{{ m.arch | fmt }}</td><td class="num">{{ m.params | fmt }}</td><td class="num">{{ m.size_gb | fmt(2) }}</td><td class="num">{{ m.context | fmt }}</td><td class="num">{{ m.layers | fmt }}</td><td class="dim">{{ m.source | fmt }}</td><td class="muted">{{ m.commit | fmt }}</td><td class="muted">{{ m.sha256 | fmt }}</td></tr>{% endfor %}</tbody>
 </table></div>
-{% if d.deploy %}<h3>Recommended: {{ d.winner.row.label }}</h3><pre>{{ d.deploy.command }}</pre>{% endif %}
+
+<h3>llama.cpp builds</h3>
+<div class="wrap"><table>
+  <thead><tr><th>id</th><th>ref</th><th>commit</th><th>backend</th><th>version</th><th>cmake</th></tr></thead>
+  <tbody>{% for b in plan.builds %}<tr><td>{{ b.id }}</td><td>{{ b.ref | fmt }}</td><td class="muted">{{ (b.commit or '')[:12] | fmt }}</td><td>{{ b.backend | fmt }}</td><td>{{ b.version | fmt }}</td><td class="wrapcell dim">{% for k, v in (b.cmake or {}).items() %}{{ k }}={{ v }} {% endfor %}</td></tr>{% endfor %}</tbody>
+</table></div>
+
+<h3>llama.cpp settings</h3>
+<p class="help">Only settings that were set are listed (everything else uses llama.cpp's default). <b>Varying</b> settings are the ones that differ between runs: compare results along them.</p>
+{% if plan.varying %}
+<div class="wrap"><table>
+  <thead><tr><th>varying setting</th><th>values</th><th>meaning</th></tr></thead>
+  <tbody>{% for k, values in plan.varying.items() %}<tr><td class="warn">{{ k }}</td><td>{% for v in values %}<span class="tag v">{{ v }}</span>{% endfor %}</td><td class="dim wrapcell">{{ setting_help.get(k, '') }}</td></tr>{% endfor %}</tbody>
+</table></div>
+{% endif %}
+<div class="wrap" style="margin-top:8px"><table class="sortable" id="t-settings">
+  <thead><tr><th>setting (same in every run)</th><th>value</th><th>meaning</th></tr></thead>
+  <tbody>{% for k, v in plan.common.items() %}<tr><td>{{ k }}</td><td class="ok">{{ v }}</td><td class="dim wrapcell">{{ setting_help.get(k, '') }}</td></tr>{% endfor %}</tbody>
+</table></div>
+
+{# ------------------------------------------------------------------ hardware #}
+<h2 id="hardware">hardware</h2>
+<p class="help">The machine the runs were measured on, as recorded by each run{% if hw.env_changed %} · <span class="warn">⚠ not every run ran on the same environment (other values shown in amber)</span>{% endif %}. Below it, the resources each run used.</p>
+<div class="panel"><dl class="kv">
+  {% for f in hw.env %}<dt>{{ f.key }}</dt><dd>{{ f.value }}{% for o in f.others %} <span class="warn">| {{ o }}</span>{% endfor %}</dd>{% endfor %}
+</dl></div>
+<h3>resource usage per run</h3>
+<p class="help"><b>RSS peak</b>: most RAM the benchmarked process held (VmHWM). <b>RAM before/peak</b>: system-wide used RAM before and during the run. <b>CPU MHz</b>: average and minimum clock while measuring (a drop means throttling). <b>CPU s</b>: user + system CPU time. <b>cooldown</b>: seconds waited for the CPU to cool before starting.</p>
+{{ toolbar('t-usage', 'filter: model, phase, threads…') }}
+<div class="wrap"><table class="sortable" id="t-usage">
+  <thead><tr><th class="num">run</th><th>phase</th><th>model</th><th>variant</th><th>status</th><th class="num">duration s</th><th class="num">RSS peak MB</th><th class="num">RAM before MB</th><th class="num">RAM peak MB</th><th class="num">CPU MHz avg</th><th class="num">CPU MHz min</th><th class="num">CPU s</th><th class="num">temp peak °C</th><th class="num">cooldown s</th></tr></thead>
+  <tbody>{% for u in hw.usage %}<tr>
+    <td class="num"><a href="/run/{{ sid }}/{{ u.id }}">{{ u.id }}</a></td><td>{{ u.phase }}</td><td>{{ u.model }}</td><td>{{ u.variant }}</td>
+    <td class="{{ 'ok' if u.status == 'completed' else 'ko' }}">{{ u.status }}</td>
+    <td class="num">{{ u.duration_s | fmt(1) }}</td><td class="num">{{ u.rss_peak_mb | fmt(0) }}</td><td class="num">{{ u.ram_before_mb | fmt(0) }}</td><td class="num">{{ u.ram_peak_mb | fmt(0) }}</td>
+    <td class="num">{{ u.cpu_freq_avg_mhz | fmt(0) }}</td><td class="num">{{ u.cpu_freq_min_mhz | fmt(0) }}</td><td class="num">{{ u.cpu_s | fmt(1) }}</td><td class="num">{{ u.temp_peak_c | fmt }}</td>
+    <td class="num" title="{{ u.cooldown_note or '' }}">{{ u.cooldown_s | fmt(0) }}{% if u.cooldown_note %} <span class="muted">*</span>{% endif %}</td>
+  </tr>{% endfor %}</tbody>
+</table></div>
+{% if hw.usage | selectattr('cooldown_note') | list %}<p class="muted">* cooldown skipped: {{ (hw.usage | selectattr('cooldown_note') | first).cooldown_note }}</p>{% endif %}
+
+{# ------------------------------------------------------------------ gates #}
+{% if d.verdicts %}
+<h2 id="gates">gates</h2>
+<p class="help">Pass/fail rules from the experiment YAML. ★ marks the configuration chosen by <code>select</code>{% if d.select %} ({{ d.select.objective }} <code>{{ d.select.metric }}</code>){% endif %}.</p>
+<div class="wrap"><table class="sortable" id="t-gates">
+  <thead><tr><th></th><th>configuration</th><th>values</th><th>failed because</th></tr></thead>
+  <tbody>{% for v in d.verdicts %}
+  <tr class="{{ 'winner' if d.winner is sameas v else '' }}"><td class="{{ 'ok' if v.passed else 'ko' }}">{{ '✓' if v.passed else '✗' }}{{ ' ★' if d.winner is sameas v else '' }}</td>
+    <td>{{ v.row.label }}</td><td class="wrapcell">{% for c in v.checks %}{{ c.text }}<br>{% endfor %}</td><td class="wrapcell ko">{{ v.reasons | join('; ') }}</td></tr>
+  {% endfor %}</tbody>
+</table></div>
+{% if d.deploy %}<h3>recommended: {{ d.winner.row.label }}</h3><pre class="cmd">{{ d.deploy.command }}</pre>{% endif %}
 {% endif %}
 
-{% for title, html in charts %}
-<h2>{{ title }}</h2><div class="chart">{{ html | safe }}</div>
+{# ------------------------------------------------------------------ charts #}
+{% if charts %}
+<h2 id="charts">charts</h2>
+{% for c in charts %}
+<h3 id="chart-{{ c.key }}">{{ c.title }}</h3>
+<p class="help">{{ c.help }}</p>
+<div class="chart">{{ c.html | safe }}</div>
 {% endfor %}
+{% endif %}
 
+{# ------------------------------------------------------------------ results #}
 {% if d.bench %}
-<h2>Bench</h2>
-<div class="wrap"><table>
-  <tr><th>model</th><th>quant</th><th>variant</th><th>test</th><th>t/s</th><th>±</th><th>95% CI</th><th>median</th><th>IQR</th><th>cv</th><th>peak RSS MB</th><th>temp peak</th></tr>
-  {% for r in d.bench %}<tr><td>{{ r.model }}</td><td>{{ r.quant | fmt }}</td><td>{{ r.variant }}</td><td>{{ r.test }}</td><td class="num">{{ r.tps | fmt(2) }}</td><td class="num">{{ r.stddev | fmt(2) }}</td><td class="num">{% if r.ci_low is not none %}[{{ r.ci_low | fmt(2) }}, {{ r.ci_high | fmt(2) }}]{% else %}-{% endif %}</td><td class="num">{{ r.median | fmt(2) }}</td><td class="num">{{ r.iqr | fmt(2) }}</td><td class="num {{ 'ko' if r.unstable else '' }}">{{ r.cv | pct }}</td><td class="num">{{ r.rss_mb | fmt(0) }}</td><td class="num">{{ r.temp_peak | fmt }}</td></tr>{% endfor %}
+<h2 id="bench">bench · llama-bench</h2>
+<p class="help"><b>t/s</b>: mean tokens per second over the repetitions. <b>±</b>: standard deviation. <b>95% CI</b>: bootstrap confidence interval of the mean (two configurations whose intervals overlap are not clearly different). <b>median</b> and <b>IQR</b> (spread of the middle half) resist outliers. <b>cv</b>: stddev / mean; in red when the measurement is unstable (noisy machine, run it again).</p>
+{{ toolbar('t-bench', 'filter: model, quant, pp512, tg128…') }}
+<div class="wrap"><table class="sortable" id="t-bench">
+  <thead><tr><th>model</th><th>quant</th><th>variant</th><th>test</th><th class="num">t/s</th><th class="num">±</th><th class="num">95% CI</th><th class="num">median</th><th class="num">IQR</th><th class="num">cv</th><th class="num">peak RSS MB</th><th class="num">temp peak</th></tr></thead>
+  <tbody>{% for r in d.bench %}<tr><td>{{ r.model }}</td><td class="warn">{{ r.quant | fmt }}</td><td>{{ r.variant }}</td><td>{{ r.test }}</td><td class="num ok">{{ r.tps | fmt(2) }}</td><td class="num">{{ r.stddev | fmt(2) }}</td><td class="num" data-v="{{ r.ci_low if r.ci_low is not none else '' }}">{% if r.ci_low is not none %}[{{ r.ci_low | fmt(2) }}, {{ r.ci_high | fmt(2) }}]{% else %}-{% endif %}</td><td class="num">{{ r.median | fmt(2) }}</td><td class="num">{{ r.iqr | fmt(2) }}</td><td class="num {{ 'ko' if r.unstable else '' }}" data-v="{{ r.cv if r.cv is not none else '' }}">{{ r.cv | pct }}</td><td class="num">{{ r.rss_mb | fmt(0) }}</td><td class="num">{{ r.temp_peak | fmt }}</td></tr>{% endfor %}</tbody>
 </table></div>
 {% endif %}
 
 {% if d.latency %}
-<h2>Latency</h2>
-<div class="wrap"><table>
-  <tr><th>model</th><th>variant</th><th>suite</th><th>TTFT p50</th><th>TTFT p95</th><th>ITL p50</th><th>e2e p50</th><th>gen t/s</th><th>prompt t/s</th></tr>
-  {% for r in d.latency %}<tr><td>{{ r.model }}</td><td>{{ r.variant }}</td><td>{{ r.suite }}</td><td class="num">{{ r.ttft_ms_p50 | fmt }}</td><td class="num">{{ r.ttft_ms_p95 | fmt }}</td><td class="num">{{ r.itl_ms_p50 | fmt(2) }}</td><td class="num">{{ r.e2e_ms_p50 | fmt }}</td><td class="num">{{ r.gen_tps_mean | fmt }}</td><td class="num">{{ r.prompt_tps_mean | fmt }}</td></tr>{% endfor %}
+<h2 id="latency">latency · llama-server</h2>
+<p class="help"><b>TTFT</b>: time to first token. <b>ITL</b>: inter-token latency, the gap between two generated tokens. <b>e2e</b>: whole request. p50 = typical request, p95 = the slow tail. <b>gen/prompt t/s</b>: generation and prompt-processing speed seen by the client.</p>
+{{ toolbar('t-latency', 'filter: model, suite, threads…') }}
+<div class="wrap"><table class="sortable" id="t-latency">
+  <thead><tr><th>model</th><th>quant</th><th>variant</th><th>suite</th><th class="num">TTFT p50</th><th class="num">TTFT p95</th><th class="num">ITL p50</th><th class="num">ITL p95</th><th class="num">e2e p50</th><th class="num">gen t/s</th><th class="num">prompt t/s</th><th class="num">server RSS MB</th></tr></thead>
+  <tbody>{% for r in d.latency %}<tr><td>{{ r.model }}</td><td class="warn">{{ r.quant | fmt }}</td><td>{{ r.variant }}</td><td>{{ r.suite }}</td><td class="num">{{ r.ttft_ms_p50 | fmt }}</td><td class="num">{{ r.ttft_ms_p95 | fmt }}</td><td class="num">{{ r.itl_ms_p50 | fmt(2) }}</td><td class="num">{{ r.itl_ms_p95 | fmt(2) }}</td><td class="num">{{ r.e2e_ms_p50 | fmt }}</td><td class="num ok">{{ r.gen_tps_mean | fmt }}</td><td class="num">{{ r.prompt_tps_mean | fmt }}</td><td class="num">{{ r.server_peak_rss_mb | fmt(0) }}</td></tr>{% endfor %}</tbody>
 </table></div>
 {% endif %}
 
 {% if d.quality %}
-<h2>Quality</h2>
-<p class="muted">Objective scores 0-1; judge scores 1-5 are subjective (LLM-as-judge).</p>
-<div class="wrap"><table>
-  <tr><th>model</th><th>variant</th><th>suite</th><th>score</th><th>pass</th><th>judge</th><th>spearman</th><th>nDCG</th><th>MRR</th></tr>
-  {% for r in d.quality %}<tr><td>{{ r.model }}</td><td>{{ r.variant }}</td><td>{{ r.suite }}</td><td class="num">{{ r.score_mean | fmt(3) }}</td><td class="num">{{ r.pass_rate | pct }}</td><td class="num">{{ r['judge.overall_mean'] | fmt(2) }}</td><td class="num">{{ r.spearman | fmt(3) }}</td><td class="num">{{ r.ndcg | fmt(3) }}</td><td class="num">{{ r.mrr | fmt(3) }}</td></tr>{% endfor %}
+<h2 id="quality">quality</h2>
+<p class="help">Objective scores 0-1 come from deterministic evaluators; judge scores 1-5 are subjective (LLM-as-judge).</p>
+{{ toolbar('t-quality', 'filter: model, suite…') }}
+<div class="wrap"><table class="sortable" id="t-quality">
+  <thead><tr><th>model</th><th>variant</th><th>suite</th><th class="num">score</th><th class="num">pass</th><th class="num">judge</th><th class="num">spearman</th><th class="num">nDCG</th><th class="num">MRR</th><th class="num">gen t/s</th></tr></thead>
+  <tbody>{% for r in d.quality %}<tr><td>{{ r.model }}</td><td>{{ r.variant }}</td><td>{{ r.suite }}</td><td class="num ok">{{ r.score_mean | fmt(3) }}</td><td class="num">{{ r.pass_rate | pct }}</td><td class="num">{{ r['judge.overall_mean'] | fmt(2) }}</td><td class="num">{{ r.spearman | fmt(3) }}</td><td class="num">{{ r.ndcg | fmt(3) }}</td><td class="num">{{ r.mrr | fmt(3) }}</td><td class="num">{{ r.gen_tps_mean | fmt }}</td></tr>{% endfor %}</tbody>
 </table></div>
 {% endif %}
 
 {% if d.serving %}
-<h2>Serving</h2>
-<div class="wrap"><table>
-  <tr><th>model</th><th>variant</th><th>suite</th><th>c</th><th>req/s</th><th>gen t/s aggregate</th><th>TTFT p95</th><th>e2e p95</th><th>errors</th></tr>
-  {% for r in d.serving %}<tr><td>{{ r.model }}</td><td>{{ r.variant }}</td><td>{{ r.suite }}</td><td class="num">{{ r.c }}</td><td class="num">{{ r.requests_per_s | fmt(2) }}</td><td class="num">{{ r.gen_tps_aggregate | fmt }}</td><td class="num">{{ r.ttft_ms_p95 | fmt }}</td><td class="num">{{ r.e2e_ms_p95 | fmt }}</td><td class="num">{{ r.error_rate | pct }}</td></tr>{% endfor %}
+<h2 id="serving">serving · concurrent load</h2>
+<p class="help"><b>c</b>: clients sending requests at the same time. <b>gen t/s aggregate</b>: tokens per second for all of them together. Watch TTFT p95 grow while the aggregate flattens.</p>
+{{ toolbar('t-serving', 'filter: model, suite…') }}
+<div class="wrap"><table class="sortable" id="t-serving">
+  <thead><tr><th>model</th><th>variant</th><th>suite</th><th class="num">c</th><th class="num">req/s</th><th class="num">gen t/s aggregate</th><th class="num">TTFT p95</th><th class="num">e2e p95</th><th class="num">errors</th></tr></thead>
+  <tbody>{% for r in d.serving %}<tr><td>{{ r.model }}</td><td>{{ r.variant }}</td><td>{{ r.suite }}</td><td class="num">{{ r.c }}</td><td class="num">{{ r.requests_per_s | fmt(2) }}</td><td class="num ok">{{ r.gen_tps_aggregate | fmt }}</td><td class="num">{{ r.ttft_ms_p95 | fmt }}</td><td class="num">{{ r.e2e_ms_p95 | fmt }}</td><td class="num">{{ r.error_rate | pct }}</td></tr>{% endfor %}</tbody>
 </table></div>
 {% endif %}
+
+{% if d.lm_eval %}
+<h2 id="lm-eval">lm-evaluation-harness</h2>
+<div class="wrap"><table class="sortable" id="t-lmeval">
+  <thead><tr><th>model</th><th>variant</th><th>task.metric</th><th class="num">value</th></tr></thead>
+  <tbody>{% for r in d.lm_eval %}<tr><td>{{ r.model }}</td><td>{{ r.variant }}</td><td>{{ r.metric }}</td><td class="num">{{ r.value | fmt(4) }}</td></tr>{% endfor %}</tbody>
+</table></div>
+{% endif %}
+
+{% if d.failures %}
+<h2 id="failures">failures</h2>
+<div class="wrap"><table class="sortable" id="t-failures">
+  <thead><tr><th>phase</th><th>configuration</th><th>suite</th><th>status</th><th>error</th></tr></thead>
+  <tbody>{% for f in d.failures %}<tr><td>{{ f.phase }}</td><td>{{ f.config }}</td><td>{{ f.suite | fmt }}</td><td class="ko">{{ f.status }}</td><td class="wrapcell">{{ f.error }}</td></tr>{% endfor %}</tbody>
+</table></div>
+{% endif %}
+
+{# ------------------------------------------------------------------ runs #}
+<h2 id="runs" class="live">runs</h2>
+<p class="help">Every attempt, newest first, refreshed every 3 s while <code>llb run</code> writes. Sort and filter survive the refresh. Click a run id for its full detail.</p>
+{{ toolbar('t-runs', 'filter: completed, failed, bench, model…') }}
+<div hx-get="/e/{{ sid }}/{{ d.experiment }}/runs" hx-trigger="load, every 3s" hx-swap="innerHTML"><p class="muted">loading…</p></div>
 {% endblock %}

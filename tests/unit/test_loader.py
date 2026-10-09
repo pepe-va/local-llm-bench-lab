@@ -24,6 +24,8 @@ def test_minimal_experiment(tmp_path: Path) -> None:
     assert exp.experiment.name == "t"
     assert exp.phases.bench.repetitions == 5
     assert exp.matrix.expand() == [{}]
+    assert exp.hardware.model_retention == "keep"
+    assert exp.models[0].retention is None
 
 
 def test_extends_merges_mappings_and_replaces_lists(tmp_path: Path) -> None:
@@ -102,6 +104,28 @@ def test_duplicate_model_ids(tmp_path: Path) -> None:
 
 def test_deep_merge() -> None:
     assert deep_merge({"a": {"b": 1, "c": [1]}}, {"a": {"c": [2]}}) == {"a": {"b": 1, "c": [2]}}
+
+
+def test_model_retention_comes_from_the_machine_unless_the_model_sets_it(
+    tmp_path: Path,
+) -> None:
+    text = MINIMAL.replace(
+        "models: [{id: m, source: m.gguf}]",
+        "models: [{id: m, source: m.gguf}, {id: k, source: k.gguf, retention: keep}]",
+    )
+    exp = load_experiment(
+        write(tmp_path, "e.yaml", text + "hardware: {model_retention: delete_after_run}\n")
+    )
+    assert exp.hardware.model_retention == "delete_after_run"
+    assert [m.retention for m in exp.models] == [None, "keep"]
+
+
+def test_machine_profiles_set_model_retention() -> None:
+    root = Path(__file__).parents[2] / "experiments"
+    assert load_experiment(root / "pi5-threads.yaml").hardware.model_retention == (
+        "delete_after_run"
+    )
+    assert load_experiment(root / "pc-smoke.yaml").hardware.model_retention == "keep"
 
 
 def test_repo_examples_are_valid() -> None:

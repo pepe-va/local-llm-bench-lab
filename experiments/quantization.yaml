@@ -1,5 +1,6 @@
 # Experiment 2 (PRD §30): same base model, different quantizations.
-# Models are downloaded one at a time and removed after their runs (little disk on a Pi).
+# Models are downloaded one at a time and removed after their runs (the pi5 profile's
+# `hardware.model_retention`).
 # Pin a revision (hf://repo@<commit>:QUANT) for a series you want to repeat exactly.
 version: 1
 extends: [_profiles/pi5.yaml]
@@ -10,9 +11,9 @@ experiment:
   tags: [pi5, quantization]
 
 models:
-  - { id: qwen3-1.7b-q8_0,   source: "hf://unsloth/Qwen3-1.7B-GGUF:Q8_0",   retention: delete_after_run }
-  - { id: qwen3-1.7b-q6_k,   source: "hf://unsloth/Qwen3-1.7B-GGUF:Q6_K",   retention: delete_after_run }
-  - { id: qwen3-1.7b-q5_k_m, source: "hf://unsloth/Qwen3-1.7B-GGUF:Q5_K_M", retention: delete_after_run }
+  - { id: qwen3-1.7b-q8_0,   source: "hf://unsloth/Qwen3-1.7B-GGUF:Q8_0" }
+  - { id: qwen3-1.7b-q6_k,   source: "hf://unsloth/Qwen3-1.7B-GGUF:Q6_K" }
+  - { id: qwen3-1.7b-q5_k_m, source: "hf://unsloth/Qwen3-1.7B-GGUF:Q5_K_M" }
   - { id: qwen3-1.7b-q4_k_m, source: "hf://unsloth/Qwen3-1.7B-GGUF:Q4_K_M" }
 
 defaults:

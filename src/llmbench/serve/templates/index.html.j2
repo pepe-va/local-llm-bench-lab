@@ -1,15 +1,35 @@
 {% extends "base.html.j2" %}
+{% block crumbs %}/experiments{% endblock %}
 {% block body %}
-<h1>Experiments</h1>
-<p class="muted">Results found under: {% for r in roots %}<code>{{ r }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</p>
+<h1>ls experiments<span class="cursor"></span></h1>
+<p class="meta">results under {% for r in roots %}<code>{{ r }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</p>
 {% if experiments %}
-<div class="wrap"><table>
-  <tr><th>experiment</th><th>phases</th><th>runs</th><th>failed</th><th>last run</th><th>store</th></tr>
+<div class="cards">
+  <div class="card"><b>{{ experiments | length }}</b><span>experiments</span></div>
+  <div class="card"><b>{{ experiments | sum(attribute="runs") }}</b><span>runs</span></div>
+  <div class="card"><b class="{{ 'ko' if experiments | sum(attribute='failed') else '' }}">{{ experiments | sum(attribute="failed") }}</b><span>failed runs</span></div>
+</div>
+
+<h2>experiments</h2>
+<p class="help">Click a name to open it. Tick two or more and press <b>compare</b> to see every configuration side by side. Click a column header to sort; type in the filter to narrow rows (<code>-word</code> excludes).</p>
+<div class="toolbar">
+  <input class="filter" data-filter="t-experiments" placeholder="filter: name, phase…" aria-label="filter experiments">
+  <span class="count" data-count="t-experiments"></span>
+  <button class="btn" id="compare-btn" disabled>select experiments to compare</button>
+</div>
+<div class="wrap"><table class="sortable" id="t-experiments">
+  <thead><tr><th class="nosort"></th><th>experiment</th><th>phases</th><th class="num">runs</th><th class="num">failed</th><th>last run (UTC)</th><th>store</th></tr></thead>
+  <tbody>
   {% for e in experiments %}
-  <tr><td><a href="/e/{{ e.sid }}/{{ e.experiment }}">{{ e.experiment }}</a></td><td>{{ e.phases }}</td>
-    <td class="num">{{ e.runs }}</td><td class="num {{ 'ko' if e.failed else '' }}">{{ e.failed }}</td>
-    <td>{{ e.last }}</td><td class="muted">{{ e.path }}</td></tr>
+  <tr>
+    <td><input type="checkbox" name="pick" value="{{ e.sid }}/{{ e.experiment }}" aria-label="compare {{ e.experiment }}"></td>
+    <td><a href="/e/{{ e.sid }}/{{ e.experiment }}">{{ e.experiment }}</a></td>
+    <td>{% for p in (e.phases or '').split(',') if p %}<span class="tag">{{ p }}</span>{% endfor %}</td>
+    <td class="num">{{ e.runs }}</td><td class="num {{ 'ko' if e.failed else 'muted' }}">{{ e.failed }}</td>
+    <td data-v="{{ e.last or '' }}">{{ (e.last or '-')[:19] | replace('T', ' ') }}</td><td class="muted">{{ e.path }}</td>
+  </tr>
   {% endfor %}
+  </tbody>
 </table></div>
 {% else %}
 <p>No results yet. Run <code>llb run experiments/&lt;name&gt;.yaml</code>, or start the dashboard with <code>--results DIR</code>.</p>

@@ -45,12 +45,18 @@ class LlamaCppSection(Strict):
         return self
 
 
+Retention = Literal["keep", "delete_after_run"]
+
+
 class ModelSpec(Strict):
     id: Slug
     source: Annotated[str, Field(min_length=1)]
     sha256: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")] | None = None
     enabled: bool = True
-    retention: Literal["keep", "delete_after_run"] = "keep"
+    retention: Retention | None = None
+    """`delete_after_run` removes the model's revision from the Hugging Face cache after its
+    last run (favorites in `models/` are never touched); `keep` leaves it there.
+    Default: `hardware.model_retention` (the machine decides; a Pi profile has little disk)."""
     mmproj: str | None = None
     """Multimodal projector for vision suites (a model reference, like `source`)."""
     suites: list[str] | None = None
@@ -200,6 +206,8 @@ class Hardware(Strict):
     telemetry: Telemetry = Telemetry()
     cooldown: Cooldown = Cooldown()
     preflight: Preflight = Preflight()
+    model_retention: Retention = "keep"
+    """Retention of every model that does not set its own `retention`."""
 
 
 class Gate(Strict):

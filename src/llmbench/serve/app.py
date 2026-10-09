@@ -10,10 +10,10 @@ import json
 from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
 import jinja2
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from llmbench import __version__
@@ -21,10 +21,11 @@ from llmbench.analysis.view import build_view
 from llmbench.config.experiment import Experiment
 from llmbench.config.loader import ConfigError, load_experiment
 from llmbench.paths import runs_dir
-from llmbench.report.data import collect
+from llmbench.report.data import ReportData, collect
 from llmbench.report.html import charts
 from llmbench.report.markdown import _fmt, _pct  # pyright: ignore[reportPrivateUsage]
 from llmbench.results.store import Store
+from llmbench.serve.details import SETTING_HELP, compare_columns, compare_rows, hardware, plan
 
 
 @dataclass(frozen=True)
@@ -122,6 +123,11 @@ def create_app(  # noqa: PLR0915 (route table: one function per endpoint)
             get_plotlyjs(), media_type="text/javascript", headers={"Cache-Control": "max-age=86400"}
         )
 
+    @app.get("/static/llb.js")
+    def llb_js() -> Response:
+        js = (resources.files("llmbench.serve") / "static" / "llb.js").read_bytes()
+        return Response(js, media_type="text/javascript", headers={"Cache-Control": "no-cache"})
+
     @app.get("/e/{sid}/{experiment}", response_class=HTMLResponse)
     def experiment_page(sid: str, experiment: str) -> HTMLResponse:
         ref = get_store(sid)
@@ -129,22 +135,58 @@ def create_app(  # noqa: PLR0915 (route table: one function per endpoint)
         store = ref.open()
         try:
             d = collect(store, experiment, exp.gates if exp else None, exp.select if exp else None)
+            if not d.rows:
+                raise HTTPException(404, "no runs for this experiment")
+            the_plan = plan(store, experiment, d.rows)
+            hw = hardware(store, experiment)
         finally:
             store.close()
-        if not d.rows:
-            raise HTTPException(404, "no runs for this experiment")
-        import plotly.io as pio  # noqa: PLC0415
-
-        to_html: Any = pio.to_html  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
-        blocks = [
-            (t, str(to_html(f, include_plotlyjs=False, full_html=False))) for t, f in charts(d)
-        ]
-        return page("experiment.html.j2", d=d, sid=sid, charts=blocks, store=ref)
+        return page(
+            "experiment.html.j2", d=d, sid=sid, charts=_chart_blocks(d), store=ref,
+            plan=the_plan, hw=hw, setting_help=SETTING_HELP,
+        )  # fmt: skip
 
     @app.get("/e/{sid}/{experiment}/runs", response_class=HTMLResponse)
     def runs_partial(sid: str, experiment: str) -> HTMLResponse:
         """HTMX fragment: the latest runs, polled for live progress."""
-        return page("runs.html.j2", runs=_runs(get_store(sid), experiment, 30), sid=sid)
+        return page("runs.html.j2", runs=_runs(get_store(sid), experiment, 500), sid=sid)
+
+    @app.get("/compare", response_class=HTMLResponse)
+    def compare_page(e: Annotated[list[str] | None, Query()] = None) -> HTMLResponse:
+        """`?e=<sid>/<experiment>` repeated: every configuration of those experiments side by
+        side, with the machine each one ran on."""
+        refs = stores()
+        selected: list[dict[str, Any]] = []
+        rows: list[dict[str, Any]] = []
+        for item in e or []:
+            sid, _, experiment = item.partition("/")
+            ref = refs.get(sid)
+            if ref is None or not experiment:
+                raise HTTPException(404, f"unknown experiment {item!r}")
+            store = ref.open()
+            try:
+                view = build_view(store, experiment)
+                env = {f["key"]: f["value"] for f in hardware(store, experiment)["env"]}
+            finally:
+                store.close()
+            if not view:
+                raise HTTPException(404, f"no runs for {item!r}")
+            selected.append(
+                {"sid": sid, "experiment": experiment, "configs": len(view), "env": env}
+            )
+            rows += compare_rows(experiment, sid, view)
+        env_keys = [
+            (k, len({s["env"].get(k) for s in selected}) > 1)
+            for k in dict.fromkeys(k for s in selected for k in s["env"])
+        ]
+        return page(
+            "compare.html.j2",
+            selected=selected,
+            rows=rows,
+            columns=compare_columns(rows),
+            env_keys=env_keys,
+            experiments=_experiments(refs),
+        )
 
     @app.get("/run/{sid}/{run_id}", response_class=HTMLResponse)
     def run_page(sid: str, run_id: int) -> HTMLResponse:
@@ -197,6 +239,22 @@ def create_app(  # noqa: PLR0915 (route table: one function per endpoint)
             store.close()
 
     return app
+
+
+def _chart_blocks(d: ReportData) -> list[dict[str, str]]:
+    import plotly.io as pio  # noqa: PLC0415 (heavy import, only when needed)
+
+    to_html: Any = pio.to_html  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+    config = {"displaylogo": False, "responsive": True}
+    return [
+        {
+            "key": c.key,
+            "title": c.title,
+            "help": c.help,
+            "html": str(to_html(c.fig, include_plotlyjs=False, full_html=False, config=config)),
+        }
+        for c in charts(d, theme="terminal")
+    ]
 
 
 def _experiments(refs: dict[str, StoreRef]) -> list[dict[str, Any]]:
@@ -255,7 +313,9 @@ def _run(store: Store, run_id: int) -> dict[str, Any]:
         store.db.execute("SELECT name, value FROM run_metrics WHERE run_id = ?", (run_id,))
     )
     run["measurements"] = [
-        dict(m) for m in store.db.execute("SELECT * FROM measurements WHERE run_id = ?", (run_id,))
+        {k: v for k, v in dict(m).items() if k != "raw"}
+        | {"samples": json.loads(m["samples_ts"]) if m["samples_ts"] else []}
+        for m in store.db.execute("SELECT * FROM measurements WHERE run_id = ?", (run_id,))
     ]
     run["judge"] = [
         dict(j) for j in store.db.execute("SELECT * FROM judge_scores WHERE run_id = ?", (run_id,))

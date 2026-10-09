@@ -1,61 +1,118 @@
 {% extends "base.html.j2" %}
 {% block title %}run {{ run.id }} · llb{% endblock %}
-{% block head %}{% if samples %}<script src="/static/plotly.min.js"></script>{% endif %}{% endblock %}
+{% block crumbs %}/experiments/<a href="/e/{{ sid }}/{{ run.experiment }}">{{ run.experiment }}</a>/run/{{ run.id }}{% endblock %}
+{% block head %}{% if samples or run.measurements %}<script src="/static/plotly.min.js"></script>{% endif %}{% endblock %}
 {% block body %}
-<p><a href="/e/{{ sid }}/{{ run.experiment }}">← {{ run.experiment }}</a></p>
-<h1>Run {{ run.id }} · {{ run.phase }}{% if run.concurrency %} · c={{ run.concurrency }}{% endif %} <span class="{{ 'ok' if run.status == 'completed' else 'ko' }}">{{ run.status }}</span></h1>
-<div class="muted">{{ run.model_id }} · {{ run.build_id }} ({{ run.build_commit[:12] }}) · {% for k, v in run.variant.items() %}{{ k }}={{ v }} {% endfor %}{% if run.suite %}· {{ run.suite }}{% endif %} · {{ run.started_at }} · {{ run.duration_s | fmt(2) }} s · fingerprint <code>{{ run.fingerprint[:16] }}</code></div>
+{% macro kv(data) %}<dl class="kv">{% for k, v in data.items() if v is not none and v != '' and v is not mapping %}<dt>{{ k }}</dt><dd>{{ v | fmt(2) if v is float else v }}</dd>{% endfor %}</dl>{% endmacro %}
+<h1>run {{ run.id }} · {{ run.phase }}{% if run.concurrency %} · c={{ run.concurrency }}{% endif %} <span class="{{ 'ok' if run.status == 'completed' else 'ko' }}">[{{ run.status }}]</span><span class="cursor"></span></h1>
+<div class="meta"><b>{{ run.model_id }}</b> · build {{ run.build_id }} ({{ run.build_commit[:12] }}) · {% for k, v in run.variant.items() %}<span class="tag v">{{ k }}={{ v }}</span>{% else %}defaults{% endfor %}{% if run.suite %} · suite {{ run.suite }}{% endif %}</div>
+<div class="meta">started {{ (run.started_at or '-')[:19] | replace('T', ' ') }} UTC · {{ run.duration_s | fmt(2) }} s · fingerprint <code>{{ run.fingerprint[:16] }}</code></div>
 {% if run.error %}<pre class="ko">{{ run.error }}</pre>{% endif %}
 
+<nav class="sections">
+  {% if run.measurements %}<a href="#measurements">measurements</a>{% endif %}{% if run.metrics %}<a href="#metrics">metrics</a>{% endif %}
+  {% if samples %}<a href="#telemetry">telemetry</a>{% endif %}{% if requests %}<a href="#requests">requests</a>{% endif %}
+  {% if run.judge %}<a href="#judge">judge</a>{% endif %}<a href="#command">command</a><a href="#environment">environment</a>
+</nav>
+
 {% if run.measurements %}
-<h2>Measurements</h2>
-<div class="wrap"><table><tr><th>test</th><th>t/s</th><th>±</th><th>95% CI</th><th>median</th><th>IQR</th><th>cv</th><th>unstable</th></tr>
-{% for m in run.measurements %}<tr><td>{{ m.label }}</td><td class="num">{{ m.avg_ts | fmt(2) }}</td><td class="num">{{ m.stddev_ts | fmt(2) }}</td><td class="num">{% if m.ci_low_ts is not none %}[{{ m.ci_low_ts | fmt(2) }}, {{ m.ci_high_ts | fmt(2) }}]{% else %}-{% endif %}</td><td class="num">{{ m.median_ts | fmt(2) }}</td><td class="num">{{ m.iqr_ts | fmt(2) }}</td><td class="num">{{ m.cv | pct }}</td><td>{{ 'yes' if m.unstable else '' }}</td></tr>{% endfor %}
+<h2 id="measurements">measurements</h2>
+<p class="help">One row per llama-bench test. The chart shows every <b>repetition</b> as a dot and the mean as a bar: tightly grouped dots mean a stable measurement; a dot far from the rest is an outlier (another process, thermal throttling…).</p>
+<div class="wrap"><table class="sortable" id="t-measurements"><thead><tr><th>test</th><th class="num">prompt</th><th class="num">gen</th><th class="num">depth</th><th class="num">t/s</th><th class="num">±</th><th class="num">95% CI</th><th class="num">median</th><th class="num">IQR</th><th class="num">cv</th><th>unstable</th><th>repetitions t/s</th></tr></thead>
+<tbody>{% for m in run.measurements %}<tr><td>{{ m.label }}</td><td class="num">{{ m.n_prompt }}</td><td class="num">{{ m.n_gen }}</td><td class="num">{{ m.n_depth }}</td><td class="num ok">{{ m.avg_ts | fmt(2) }}</td><td class="num">{{ m.stddev_ts | fmt(2) }}</td><td class="num">{% if m.ci_low_ts is not none %}[{{ m.ci_low_ts | fmt(2) }}, {{ m.ci_high_ts | fmt(2) }}]{% else %}-{% endif %}</td><td class="num">{{ m.median_ts | fmt(2) }}</td><td class="num">{{ m.iqr_ts | fmt(2) }}</td><td class="num {{ 'ko' if m.unstable else '' }}">{{ m.cv | pct }}</td><td class="{{ 'ko' if m.unstable else '' }}">{{ 'yes' if m.unstable else '' }}</td><td class="dim">{{ m.samples | join(', ') }}</td></tr>{% endfor %}</tbody>
 </table></div>
+<div class="chart"><div id="reps" style="height:{{ 140 + 70 * run.measurements | length }}px"></div></div>
+<script>
+(() => {
+  const ms = {{ run.measurements | tojson }};
+  const mono = 'ui-monospace, "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace', grid = "#1e2a22";
+  const colors = ["#4ade80", "#fbbf24", "#22d3ee", "#f472b6"];
+  Plotly.newPlot("reps", ms.flatMap((m, i) => [
+    { type: "bar", orientation: "h", y: [m.label], x: [m.avg_ts], name: m.label + " mean", marker: { color: colors[i % 4], opacity: 0.25 },
+      hovertemplate: "mean %{x:.2f} t/s<extra>" + m.label + "</extra>", showlegend: false },
+    { type: "scatter", mode: "markers", y: m.samples.map(() => m.label), x: m.samples, name: m.label,
+      marker: { color: colors[i % 4], size: 11, line: { color: "#0a0e0c", width: 1 } },
+      hovertemplate: "repetition %{pointNumber}: %{x:.2f} t/s<extra>" + m.label + "</extra>", showlegend: false },
+  ]), {
+    barmode: "overlay", paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: { family: mono, color: "#b8c4bb" },
+    margin: { t: 20, l: 70, r: 20, b: 50 }, xaxis: { title: "tokens/s (each dot = one repetition)", gridcolor: grid, zerolinecolor: grid, rangemode: "tozero" },
+    yaxis: { gridcolor: grid }, hoverlabel: { font: { family: mono }, bgcolor: "#0d1310", bordercolor: "#4ade80" },
+  }, { displaylogo: false, responsive: true });
+})();
+</script>
 {% endif %}
 
 {% if run.metrics %}
-<h2>Metrics</h2>
-<div class="wrap"><table><tr><th>name</th><th>value</th></tr>
-{% for k, v in run.metrics | dictsort %}<tr><td>{{ k }}</td><td class="num">{{ v | fmt(3) }}</td></tr>{% endfor %}
+<h2 id="metrics">metrics</h2>
+<div class="toolbar"><input class="filter" data-filter="t-metrics" placeholder="filter: ttft, p95, score…" aria-label="filter"><span class="count" data-count="t-metrics"></span></div>
+<div class="wrap"><table class="sortable" id="t-metrics"><thead><tr><th>name</th><th class="num">value</th></tr></thead>
+<tbody>{% for k, v in run.metrics | dictsort %}<tr><td>{{ k }}</td><td class="num">{{ v | fmt(3) }}</td></tr>{% endfor %}</tbody>
 </table></div>
 {% endif %}
 
 {% if samples %}
-<h2>Telemetry</h2>
-<div class="chart" id="telemetry" style="height:320px"></div>
+<h2 id="telemetry">telemetry</h2>
+<p class="help">Sampled while the run was measuring: CPU temperature, CPU clock and the memory held by the benchmarked process over time.</p>
+<div class="chart"><div id="telemetry" style="height:340px"></div></div>
 <script>
+(() => {
   const s = {{ samples | tojson }};
-  Plotly.newPlot("telemetry", [
-    {x: s.map(r => r.t), y: s.map(r => r.temp_c), name: "temp °C", mode: "lines"},
-    {x: s.map(r => r.t), y: s.map(r => r.proc_rss_mb), name: "process RSS MB", mode: "lines", yaxis: "y2"},
-  ], {margin: {t: 20}, xaxis: {title: "seconds"}, yaxis: {title: "°C"}, yaxis2: {title: "MB", overlaying: "y", side: "right"}});
+  const mono = 'ui-monospace, "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace', grid = "#1e2a22";
+  const t = s.map((r) => r.t);
+  const traces = [
+    { x: t, y: s.map((r) => r.proc_rss_mb), name: "process RSS MB", mode: "lines", line: { color: "#22d3ee" }, yaxis: "y2" },
+    { x: t, y: s.map((r) => r.cpu_freq_mhz), name: "CPU MHz", mode: "lines", line: { color: "#fbbf24" }, yaxis: "y3" },
+  ];
+  const hasTemp = s.some((r) => r.temp_c != null);
+  if (hasTemp) traces.unshift({ x: t, y: s.map((r) => r.temp_c), name: "temp °C", mode: "lines", line: { color: "#f87171" } });
+  Plotly.newPlot("telemetry", traces, {
+    paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: { family: mono, color: "#b8c4bb" }, margin: { t: 20, l: 60, r: 70, b: 50 },
+    legend: { orientation: "h", y: 1.12 }, xaxis: { title: "seconds", gridcolor: grid, domain: [0, 0.9] },
+    yaxis: { title: hasTemp ? "°C" : "", gridcolor: grid, showticklabels: hasTemp },
+    yaxis2: { title: "MB", overlaying: "y", side: "right", showgrid: false },
+    yaxis3: { title: "MHz", overlaying: "y", side: "right", anchor: "free", position: 1, showgrid: false },
+    hoverlabel: { font: { family: mono }, bgcolor: "#0d1310", bordercolor: "#4ade80" },
+  }, { displaylogo: false, responsive: true });
+})();
 </script>
 {% endif %}
 
 {% if requests %}
-<h2>Requests ({{ requests | length }})</h2>
-<div class="wrap"><table>
-  <tr><th>id</th><th>ok</th><th>TTFT ms</th><th>e2e ms</th><th>prompt</th><th>gen</th><th>gen t/s</th><th>score</th><th>detail</th><th>response</th></tr>
-  {% for q in requests %}
+<h2 id="requests">Requests ({{ requests | length }})</h2>
+<p class="help">Every request sent to llama-server. <b>TTFT</b>: time to first token; <b>e2e</b>: whole request; <b>prompt/gen</b>: tokens in/out.</p>
+<div class="toolbar"><input class="filter" data-filter="t-requests" placeholder="filter: request id, text…" aria-label="filter"><span class="count" data-count="t-requests"></span></div>
+<div class="wrap"><table class="sortable" id="t-requests">
+  <thead><tr><th>id</th><th>ok</th><th class="num">TTFT ms</th><th class="num">e2e ms</th><th class="num">prompt</th><th class="num">gen</th><th class="num">gen t/s</th><th class="num">score</th><th>detail</th><th>response</th></tr></thead>
+  <tbody>{% for q in requests %}
   <tr><td>{{ q.request_id }}</td><td class="{{ 'ok' if q.ok else 'ko' }}">{{ '✓' if q.ok else '✗' }}</td>
     <td class="num">{{ q.ttft_ms | fmt }}</td><td class="num">{{ q.e2e_ms | fmt }}</td><td class="num">{{ q.prompt_n }}</td><td class="num">{{ q.predicted_n }}</td>
-    <td class="num">{{ q.gen_tps | fmt }}</td><td class="num">{{ q.score | fmt(2) }}</td><td class="wrapcell">{{ q.eval_detail or q.error or '' }}</td>
+    <td class="num">{{ q.gen_tps | fmt }}</td><td class="num">{{ q.score | fmt(2) }}</td><td class="wrapcell dim">{{ q.eval_detail or q.error or '' }}</td>
     <td class="wrapcell">{{ (q.content or '')[:300] }}</td></tr>
-  {% endfor %}
+  {% endfor %}</tbody>
 </table></div>
 {% endif %}
 
 {% if run.judge %}
-<h2>Judge scores (subjective)</h2>
-<div class="wrap"><table><tr><th>request</th><th>criterion</th><th>score</th><th>explanation</th></tr>
-{% for j in run.judge %}<tr><td>{{ j.request_id }}</td><td>{{ j.criterion }}</td><td class="num">{{ j.score | fmt(0) }}</td><td class="wrapcell">{{ j.explanation }}</td></tr>{% endfor %}
+<h2 id="judge">judge scores (subjective)</h2>
+<div class="wrap"><table class="sortable" id="t-judge"><thead><tr><th>request</th><th>criterion</th><th class="num">score</th><th>explanation</th></tr></thead>
+<tbody>{% for j in run.judge %}<tr><td>{{ j.request_id }}</td><td>{{ j.criterion }}</td><td class="num">{{ j.score | fmt(0) }}</td><td class="wrapcell">{{ j.explanation }}</td></tr>{% endfor %}</tbody>
 </table></div>
 {% endif %}
 
-<h2>Configuration</h2>
-<pre>{{ run.argv | join(' ') }}</pre>
-<details><summary>config, environment, telemetry summary</summary>
+<h2 id="command">command</h2>
+<p class="help">The exact command llb ran. Copy it to reproduce this measurement by hand.</p>
+<pre class="cmd">{{ run.argv | join(' ') }}</pre>
+{% if run.ignored %}<p class="warn">settings this tool ignores: {{ run.ignored | join(', ') }}</p>{% endif %}
+
+<h2 id="environment">environment</h2>
+<div class="grid2">
+  {% if run.env %}<div class="panel"><h3 style="margin-top:0">machine</h3>{{ kv(run.env) }}</div>{% endif %}
+  {% if run.telemetry %}<div class="panel"><h3 style="margin-top:0">resources</h3>{{ kv(run.telemetry) }}</div>{% endif %}
+  {% if run.model %}<div class="panel"><h3 style="margin-top:0">model</h3>{{ kv(run.model) }}{% if run.model.gguf %}{{ kv(run.model.gguf) }}{% endif %}</div>{% endif %}
+  {% if run.build %}<div class="panel"><h3 style="margin-top:0">llama.cpp build</h3>{{ kv(run.build) }}{% if run.build.cmake %}{{ kv(run.build.cmake) }}{% endif %}</div>{% endif %}
+  {% if run.cooldown %}<div class="panel"><h3 style="margin-top:0">cooldown</h3>{{ kv(run.cooldown) }}</div>{% endif %}
+</div>
+<details><summary>raw JSON: config, environment, telemetry, provenance</summary>
 <pre>{{ {"config": run.config, "ignored": run.ignored, "env": run.env, "telemetry": run.telemetry, "cooldown": run.cooldown, "model": run.model, "build": run.build, "suite_provenance": run.suite_provenance} | tojson_pretty }}</pre>
 </details>
 {% endblock %}

@@ -13,7 +13,7 @@ from llmbench.gates.rules import check, select
 from llmbench.llamacpp.argv import sampling_flags
 from llmbench.llamacpp.introspect import parse_help, unknown_flags
 from llmbench.report.data import collect
-from llmbench.report.html import render_html, render_png
+from llmbench.report.html import render_html, render_png, short_labels
 from llmbench.report.markdown import render_guidance, render_markdown
 from llmbench.results.models import Measurement, RunRecord
 from llmbench.results.store import Store
@@ -148,7 +148,7 @@ def test_reports_and_guidance(store: Store, tmp_path: Path) -> None:
     assert "Time to first token" in html
     assert html.count("<table") >= 2
     assert "[9.40, 9.60]" in html
-    assert "whiskers: 95% CI" in html
+    assert "95% bootstrap confidence interval" in html  # every chart explains itself
     pngs = render_png(d, tmp_path / "charts")
     assert {p.name for p in pngs} == {"bench.png", "latency.png"}
     assert all(p.stat().st_size > 1000 for p in pngs)
@@ -160,3 +160,11 @@ def test_deployment_without_server_runs_uses_bench_binary_dir(store: Store) -> N
         "b", "c", "m", {}, {"path": "/m.gguf"}, rows[0].config, runs=[rows[0].runs[0]]
     )
     assert deployment(bench_only).argv[0] == "/opt/llama/llama-server"
+
+
+def test_short_labels_drop_the_parts_every_config_shares() -> None:
+    labels = ["m-q8 · pc · defaults", "m-q4 · pc · defaults"]
+    assert short_labels(labels) == {labels[0]: "m-q8", labels[1]: "m-q4"}
+    assert short_labels(["only · one"]) == {"only · one": "only · one"}
+    same = ["a · b", "a · b"]
+    assert short_labels(same) == {"a · b": "a · b"}

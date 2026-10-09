@@ -1,0 +1,25 @@
+# Same base model, different quantizations, on a desktop/laptop PC (CPU).
+# Models stay in the HF cache (the pc profile's `hardware.model_retention`).
+# Pin a revision (hf://repo@<commit>:QUANT) for a series you want to repeat exactly.
+version: 1
+extends: [_profiles/pc.yaml, _profiles/deterministic.yaml]
+
+experiment:
+  name: pc-quantization
+  description: Speed and memory of Q8_0 / Q6_K / Q5_K_M / Q4_K_M for the same model.
+  tags: [pc, quantization]
+
+models:
+  - { id: qwen3-1.7b-q8_0,   source: "hf://unsloth/Qwen3-1.7B-GGUF:Q8_0" }
+  - { id: qwen3-1.7b-q6_k,   source: "hf://unsloth/Qwen3-1.7B-GGUF:Q6_K" }
+  - { id: qwen3-1.7b-q5_k_m, source: "hf://unsloth/Qwen3-1.7B-GGUF:Q5_K_M" }
+  - { id: qwen3-1.7b-q4_k_m, source: "hf://unsloth/Qwen3-1.7B-GGUF:Q4_K_M" }
+
+defaults:
+  load: { threads: 8, batch_size: 512, ubatch_size: 256, flash_attn: auto }
+  kv: { cache_type_k: f16, cache_type_v: f16 }
+
+phases:
+  bench: { n_prompt: [512], n_gen: [128], n_depth: [0], repetitions: 5 }
+
+output: { report: [md, html, png] }

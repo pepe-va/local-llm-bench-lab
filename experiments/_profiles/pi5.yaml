@@ -9,3 +9,4 @@ hardware:
   telemetry: { hz: 2, sources: [linux, rpi] }
   cooldown: { enabled: true, max_temp_c: 60, stable_for_s: 10, poll_s: 5, timeout_s: 900 }
   preflight: { require_governor: performance, fail_on_throttled: true }
+  model_retention: delete_after_run   # little disk: each model leaves the HF cache after its last run

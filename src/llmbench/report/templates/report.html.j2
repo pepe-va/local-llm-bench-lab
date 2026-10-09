@@ -62,8 +62,9 @@
   {% endif %}
   {% endif %}
 
-  {% for title, html in charts %}
+  {% for title, help, html in charts %}
   <h2>{{ title }}</h2>
+  <p class="muted">{{ help }}</p>
   <div class="chart">{{ html | safe }}</div>
   {% endfor %}
 

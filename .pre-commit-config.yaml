@@ -1,31 +1,57 @@
+# Install once per clone: `uv run pre-commit install` (sets up both hook types below).
+# - pre-commit: file hygiene, lockfile, ruff, basedpyright.
+# - pre-push:   the test suite.
+# CI runs the pre-commit stage on every push and pull request (.github/workflows/ci.yml).
+default_install_hook_types: [pre-commit, pre-push]
+default_stages: [pre-commit]
+
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
+      # Fixtures are real tool outputs and static/ holds vendored files: both stay byte-exact.
       - id: trailing-whitespace
+        exclude: ^(tests/fixtures/|src/llmbench/serve/static/)
       - id: end-of-file-fixer
+        exclude: ^(tests/fixtures/|src/llmbench/serve/static/)
       - id: check-yaml
       - id: check-toml
       - id: check-added-large-files
         args: ["--maxkb=1024"]
 
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.12.12
-    hooks:
-      - id: ruff-check
-        args: [--fix]
-      - id: ruff-format
-
-  - repo: https://github.com/astral-sh/uv-pre-commit
-    rev: 0.8.15
-    hooks:
-      - id: uv-lock
-
+  # Tools run through `uv run` so the hooks use the versions locked in uv.lock, the same
+  # ones as `uv run ruff` / `uv run basedpyright` by hand. They check the whole project,
+  # exactly like CI, rather than only the staged files.
   - repo: local
     hooks:
+      - id: uv-lock
+        name: uv lock --check
+        entry: uv lock --check
+        language: system
+        files: ^(pyproject\.toml|uv\.lock)$
+        pass_filenames: false
+      - id: ruff-check
+        name: ruff check
+        entry: uv run ruff check --fix
+        language: system
+        types_or: [python, pyi]
+        pass_filenames: false
+      - id: ruff-format
+        name: ruff format
+        entry: uv run ruff format
+        language: system
+        types_or: [python, pyi]
+        pass_filenames: false
       - id: basedpyright
         name: basedpyright
         entry: uv run basedpyright
         language: system
         types: [python]
         pass_filenames: false
+      - id: pytest
+        name: pytest
+        entry: uv run pytest -q
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
