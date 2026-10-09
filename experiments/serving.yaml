@@ -11,7 +11,9 @@ models:
   - { id: qwen3-1.7b-q4km, source: "hf://unsloth/Qwen3-1.7B-GGUF:Q4_K_M" }
 
 defaults:
-  load: { threads: 4, ctx_size: 8192 }     # split across slots: 1024 tokens per slot at c=8
+  # split across slots: every level runs with 8 slots (max concurrency), so 1536 tokens per
+  # slot. synthetic-chat-mix needs up to 1169 (prompt + output); 8192 left 3 requests short.
+  load: { threads: 4, ctx_size: 12288 }
   server: { cont_batching: true }
 
 phases:
