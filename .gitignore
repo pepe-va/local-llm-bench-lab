@@ -1,24 +1,35 @@
+# Allowlist: everything at the top level is ignored unless it is listed here.
+# To put a new top-level file or directory under version control, add a `!` line.
+# Local tooling (.venv, caches, .claude, editor folders, .llb_home, .hf_home, dotfiles…)
+# stays out without having to be named.
+/*
+!/.github/
+!/.gitignore
+!/.pre-commit-config.yaml
+!/.python-version
+!/CHANGELOG.md
+!/README.md
+!/experiments/
+!/models/
+!/pyproject.toml
+!/src/
+!/suites/
+!/tests/
+!/uv.lock
+
+# --- Inside the allowed directories ------------------------------------------
+
 # Python
 __pycache__/
 *.py[cod]
-.venv/
-.pytest_cache/
-.ruff_cache/
-.coverage
-htmlcov/
-dist/
-build/
 *.egg-info/
 
 # Models: keep only the README (favorites live here, never in git)
-models/*
-!models/README.md
+/models/*
+!/models/README.md
 *.gguf
 
-# Benchmark outputs (default lives in $LLB_HOME, these cover local overrides)
-/results/
-/reports/
-/runs/
+# Benchmark data, wherever it ends up
 *.sqlite
 *.sqlite-*
 *.parquet
@@ -26,8 +37,3 @@ models/*
 # Secrets
 .env
 .env.*
-
-# Editors / local tooling
-.idea/
-.vscode/
-.claude/settings.local.json
