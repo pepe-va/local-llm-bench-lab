@@ -14,6 +14,8 @@ Normalization = Literal["strip", "lower", "collapse_ws", "strip_punct", "strip_a
 
 
 class Exact(Strict):
+    """Pass when the whole answer equals the expected text (after normalization)."""
+
     type: Literal["exact"]
     value: str | None = None
     """Expected text; defaults to the item's `reference`."""
@@ -21,19 +23,28 @@ class Exact(Strict):
 
 
 class Contains(Strict):
+    """Pass when the answer contains the texts (score: the share found)."""
+
     type: Literal["contains"]
     values: Annotated[list[str], Field(min_length=1)]
+    """Texts to look for, one per line."""
     mode: Literal["all", "any"] = "all"
+    """`all`: every text must appear; `any`: one is enough."""
     case_sensitive: bool = False
 
 
 class NotContains(Strict):
+    """Pass when none of the texts appears in the answer."""
+
     type: Literal["not_contains"]
     values: Annotated[list[str], Field(min_length=1)]
+    """Forbidden texts, one per line."""
     case_sensitive: bool = False
 
 
 class Regex(Strict):
+    """Pass when a regular expression (Python syntax) matches the answer."""
+
     type: Literal["regex"]
     pattern: str
     mode: Literal["search", "fullmatch"] = "search"
@@ -53,6 +64,8 @@ class RegexExtract(Strict):
 
 
 class Length(Strict):
+    """Pass when the answer's length is within the limits."""
+
     type: Literal["length"]
     min_chars: Annotated[int, Field(ge=0)] | None = None
     max_chars: Annotated[int, Field(ge=0)] | None = None
@@ -65,8 +78,11 @@ class Length(Strict):
 
 
 class JsonSchema(Strict):
+    """Pass when the answer (or its ```json block) is JSON valid against a schema."""
+
     type: Literal["json_schema"]
     schema_: Annotated[dict[str, Any], Field(alias="schema")]
+    """A JSON Schema."""
 
 
 class LlmJudge(Strict):
@@ -83,16 +99,22 @@ class LlmJudge(Strict):
 
 
 class All(Strict):
+    """Pass when every part passes (score: the lowest)."""
+
     type: Literal["all"]
     of: Annotated[list["EvaluatorSpec"], Field(min_length=1)]
 
 
 class AnyOf(Strict):
+    """Pass when one part passes (score: the highest)."""
+
     type: Literal["any"]
     of: Annotated[list["EvaluatorSpec"], Field(min_length=1)]
 
 
 class Weighted(Strict):
+    """Weighted mean of the parts' scores; pass at `pass_threshold`."""
+
     type: Literal["weighted"]
     of: Annotated[list["WeightedPart"], Field(min_length=1)]
     pass_threshold: Annotated[float, Field(ge=0, le=1)] = 0.5

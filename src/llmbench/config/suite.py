@@ -61,7 +61,9 @@ class Synthetic(Strict):
     prompt_tokens: Distribution
     output_tokens: Distribution
     count: Annotated[int, Field(gt=0, le=100_000)] = 20
+    """Number of requests."""
     seed: int = 42
+    """Same seed, same token counts and the same text cuts for a given model."""
     corpus: Literal["words"] | Path = "words"
     """`words`: built-in deterministic word stream; or a UTF-8 text file to sample from."""
 
@@ -70,24 +72,38 @@ class Item(Strict):
     """An inline request. `input` is optional text that templates and evaluators can use."""
 
     id: str | None = None
+    """Short name of the request in results (its position if unset)."""
     category: str | None = None
+    """Groups requests in reports (e.g. per-category pass rate)."""
     system: str | None = None
+    """System prompt for this item (chat endpoint); overrides the suite's."""
     prompt: str = ""
+    """The user message (chat) or raw prompt text (completion)."""
     input: str | None = None
+    """Source text the prompt works on; `length` evaluators can compare with it."""
     reference: str | None = None
+    """Expected answer, used by `exact` and `regex_extract` and shown to the judge."""
     max_tokens: Annotated[int, Field(gt=0)] | None = None
+    """Answer length cap for this item; the suite's `max_tokens` if unset."""
     evaluator: EvaluatorSpec | None = None
+    """How to score the answer; the suite's `evaluator` if unset."""
     # vision (chat endpoint)
     image: str | None = None
     """Image path (relative to the suite file) or http(s)/data URL."""
     # embeddings: a pair and its similarity label
     a: str | None = None
+    """Embeddings: first text of the pair."""
     b: str | None = None
+    """Embeddings: second text of the pair."""
     label: float | None = None
+    """Embeddings: expected similarity of `a` and `b` (e.g. 0-1)."""
     # rerank: a query, candidate documents and the indices of the relevant ones
     query: str | None = None
+    """Rerank: the search query."""
     documents: list[str] | None = None
+    """Rerank: candidate documents, one per line."""
     relevant: list[int] | None = None
+    """Rerank: indices (from 0) of the relevant documents."""
 
 
 class FileSource(Strict):
@@ -144,6 +160,7 @@ class Columns(Strict):
 class Suite(Strict):
     version: Literal[1] = 1
     name: Slug
+    """Identifies the suite in results and reports."""
     description: str = ""
     endpoint: Literal["completion", "chat", "embeddings", "rerank"] = "completion"
     """`chat` items may carry an `image` (vision, needs the model's `mmproj`)."""
@@ -158,6 +175,7 @@ class Suite(Strict):
     template: str | None = None
     """Python format string over the row/item fields, e.g. "Solve:\n{prompt}"."""
     max_tokens: Annotated[int, Field(gt=0)] = 256
+    """Answer length cap (`n_predict`) for every request without its own."""
     evaluator: EvaluatorSpec | None = None
     """Default evaluator for every item without its own."""
     sampling: SamplingConfig = SamplingConfig()

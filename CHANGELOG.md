@@ -7,6 +7,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- Config fields' docstrings are now descriptions in the JSON schema, and evaluator and suite fields are documented, so the lab's forms can explain every field.
 - `hardware.model_retention` (`keep` by default, or `delete_after_run`) sets the retention of every model that does not set its own `retention`, so the machine profile decides whether downloaded models stay in the Hugging Face cache.
 - Release workflow (`.github/workflows/release.yml`). Pushing a `vX.Y.Z` tag runs every CI check on the tagged commit. If they pass, it publishes the GitHub Release, with the matching CHANGELOG section as notes and the wheel and sdist attached. It refuses a tag that does not match the `pyproject.toml` version or has no CHANGELOG section (ADR-0021).
 - A pre-push hook runs the tests. `uv run pre-commit install` sets it up together with the pre-commit hook.
