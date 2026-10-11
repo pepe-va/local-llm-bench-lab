@@ -4,7 +4,9 @@ Avoids depending on the `gguf` package (and numpy) just to read a header.
 Spec: https://github.com/ggml-org/ggml/blob/master/docs/gguf.md
 """
 
+import contextlib
 import math
+import os
 import struct
 from collections import Counter
 from dataclasses import dataclass, field
@@ -119,11 +121,17 @@ def read_gguf(paths: Path | list[Path] | tuple[Path, ...]) -> GGUFInfo:
 
 
 def _read_one(path: Path) -> GGUFInfo:
+    # Reading must not count as using the model: huggingface_hub reports a blob's atime as
+    # "last accessed", which `llb models prune --older-than` relies on.
+    before = path.stat()
     try:
         with path.open("rb") as f:
             return _parse(f)
     except (struct.error, UnicodeDecodeError) as e:
         raise GGUFError(f"{path}: truncated or corrupt GGUF header ({e})") from None
+    finally:
+        with contextlib.suppress(OSError):  # e.g. a read-only file we do not own
+            os.utime(path, ns=(before.st_atime_ns, before.st_mtime_ns))
 
 
 def _parse(f: BinaryIO) -> GGUFInfo:

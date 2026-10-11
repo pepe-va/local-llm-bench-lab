@@ -1,5 +1,6 @@
 """Model references, file selection, favorites, offline cache, retention and GGUF metadata."""
 
+import os
 from pathlib import Path
 
 import httpx2  # pyright: ignore[reportMissingImports]
@@ -257,6 +258,16 @@ def test_gguf_reader(tmp_path: Path) -> None:
     assert info.tensor_types == {"Q4_K": 1024 * 2048, "F32": 2048}
     assert info.metadata["tokenizer.ggml.tokens"] == "<array of 100>"
     assert (info.metadata["flag"], info.metadata["neg"], info.metadata["ratio"]) == (True, -3, 0.5)
+
+
+def test_reading_a_gguf_does_not_count_as_using_it(tmp_path: Path) -> None:
+    """`prune --older-than` reads the blob's atime: inspecting must not refresh it."""
+    p = write_gguf(tmp_path / "m.gguf")
+    old = 1_600_000_000_000_000_000
+    os.utime(p, ns=(old, old))
+    read_gguf(p)
+    assert p.stat().st_atime_ns == old
+    assert p.stat().st_mtime_ns == old
 
 
 def test_gguf_quant_falls_back_to_dominant_tensor_type(tmp_path: Path) -> None:

@@ -25,6 +25,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - The pre-commit hooks run ruff and uv through `uv run`, with the versions locked in `uv.lock`. Before, they used older pinned copies (ruff 0.12, uv 0.8). Real tool outputs under `tests/fixtures/` and the vendored htmx are excluded from the whitespace hooks, so they stay byte-exact.
 - The README is now a user guide: a system diagram, a quick start, the example experiments, the commands and the limitations.
 
+### Fixed
+
+- Reading a GGUF header (`llb models inspect`, the lab) no longer refreshes the file's access time, which huggingface_hub reports as "last used". Before, inspecting a cached model made `llb models prune --older-than` skip it.
+
 ## [0.11.0] - 2026-10-09
 
 Serving runs could ask llama-server for more context than a slot has. llb now reports that before measuring, and fixes the example experiment that ran into it.
