@@ -10,7 +10,7 @@ import json
 from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, cast
 
 import jinja2
 from fastapi import FastAPI, HTTPException, Query
@@ -55,11 +55,12 @@ def discover(roots: list[Path]) -> dict[str, StoreRef]:
     return refs
 
 
-def _env() -> jinja2.Environment:
-    env = jinja2.Environment(
-        loader=jinja2.PackageLoader("llmbench.serve", "templates"),
-        autoescape=True,
-    )
+def _env(*, lab: bool = False) -> jinja2.Environment:
+    loaders: list[jinja2.BaseLoader] = [jinja2.PackageLoader("llmbench.serve", "templates")]
+    if lab:
+        loaders.insert(0, jinja2.PackageLoader("llmbench.lab", "templates"))
+    env = jinja2.Environment(loader=jinja2.ChoiceLoader(loaders), autoescape=True)
+    cast(dict[str, Any], env.globals)["lab"] = lab
 
     def defined(v: Any) -> Any:
         return None if isinstance(v, jinja2.Undefined) else v
@@ -77,12 +78,16 @@ def _env() -> jinja2.Environment:
 
 
 def create_app(  # noqa: PLR0915 (route table: one function per endpoint)
-    roots: list[Path] | None = None, experiments: list[Path] | None = None
+    roots: list[Path] | None = None, experiments: list[Path] | None = None, *, lab: bool = False
 ) -> FastAPI:
     """`roots`: where to look for results (default `$LLB_HOME/runs`). `experiments`: YAMLs
-    whose gates and selection should be shown for their results."""
-    app = FastAPI(title="llb dashboard", version=__version__, docs_url="/api/docs")
-    env = _env()
+    whose gates and selection should be shown for their results. `lab`: the pages link to
+    the lab (`llb lab` adds its routes and templates on top of this app)."""
+    app = FastAPI(
+        title="llb lab" if lab else "llb dashboard", version=__version__, docs_url="/api/docs"
+    )
+    env = _env(lab=lab)
+    app.state.env = env
     search = roots or [runs_dir()]
     gates: dict[str, Experiment] = {}
     for path in experiments or []:

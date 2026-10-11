@@ -1,0 +1,45 @@
+{% extends "lab_base.html.j2" %}
+{% block scripts %}<script src="/lab/static/chat.js" defer></script>{% endblock %}
+{% block style %}
+<style>
+  .chat-log { border: 1px solid var(--line); background: var(--panel); min-height: 140px; max-height: 62vh; overflow-y: auto; padding: 12px 14px; margin: 10px 0; }
+  .m { margin: 0 0 14px; } .m .who { color: var(--muted); font-size: 12px; }
+  .m.user .who { color: var(--cyan); } .m.assistant .who { color: var(--green); } .m.note { color: var(--muted); font-style: italic; }
+  .m .text { white-space: pre-wrap; word-break: break-word; }
+  .m details { color: var(--dim); white-space: pre-wrap; margin: 2px 0 6px; border-left: 2px solid var(--line-2); padding-left: 10px; }
+  .m details summary { margin: 0; }
+  .m .stats { color: var(--amber); font-size: 12px; margin-top: 4px; }
+  .m .err { color: var(--red); white-space: pre-wrap; }
+  textarea { width: 100%; min-height: 70px; resize: vertical; }
+  .row select#chat-model { max-width: 460px; }
+</style>
+{% endblock %}
+{% block content %}
+<h1>chat<span class="cursor"></span></h1>
+<div class="panel">
+  <div class="row">
+    <label>model <select id="chat-model"></select></label>
+    <label>llama.cpp <select id="chat-build"></select></label>
+    <label>context <input type="number" id="chat-ctx" value="4096" min="256" step="256"></label>
+    <label>threads <input type="number" id="chat-threads" min="1" placeholder="auto"></label>
+    <label>reasoning <select id="chat-reasoning"><option>auto</option><option>on</option><option>off</option></select></label>
+    <button class="btn" id="chat-load">load</button>
+    <button class="btn red" id="chat-unload">unload</button>
+  </div>
+  <div class="state" id="chat-state"></div>
+  <div class="hint" id="build-hint" hidden>No llama.cpp build with llama-server yet: <a href="/lab/system">build one in the system tab</a> (several minutes on a Pi).</div>
+</div>
+<div class="chat-log" id="messages"><div class="m note">Load a model, then write below. Every answer shows time to first token, speed, memory and temperature.</div></div>
+<form id="chat-form">
+  <textarea id="prompt" placeholder="Message (Enter sends, Shift+Enter for a new line)"></textarea>
+  <div class="row" style="margin-top:8px">
+    <label>temperature <input type="number" id="temp" value="0.7" min="0" max="2" step="0.1"></label>
+    <label>max tokens <input type="number" id="max-tokens" value="1024" min="1"></label>
+    <label style="flex:1 1 320px">system prompt <input id="system" placeholder="optional"></label>
+    <button class="btn" id="send">send</button>
+    <button class="btn red" type="button" id="abort" disabled>stop</button>
+    <button class="btn" type="button" id="clear">clear</button>
+  </div>
+</form>
+
+{% endblock %}

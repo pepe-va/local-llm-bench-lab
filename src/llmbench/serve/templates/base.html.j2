@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
-<title>{% block title %}llb dashboard{% endblock %}</title>
+<title>{% block title %}llb {{ 'lab' if lab else 'dashboard' }}{% endblock %}</title>
 <script src="/static/htmx.min.js"></script>
 <script src="/static/llb.js" defer></script>
 {% block head %}{% endblock %}
@@ -29,6 +29,7 @@
   .prompt { color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
   .prompt .user { color: var(--green); } .prompt .path { color: var(--cyan); } .prompt a { color: inherit; }
   .term-bar .right { margin-left: auto; color: var(--muted); white-space: nowrap; }
+  .term-bar .tabs { display: flex; gap: 12px; } .term-bar .tabs a { color: var(--dim); } .term-bar .tabs a.on { color: var(--green); }
 
   main { max-width: 1320px; margin: 0 auto; padding: 20px 16px 80px; }
   h1 { font-size: 22px; font-weight: 700; margin: 6px 0 4px; color: #e7efe9; }
@@ -101,11 +102,12 @@
 <body>
 <div class="term-bar">
   <div class="dots"><i></i><i></i><i></i></div>
-  <div class="prompt"><span class="user">llb@dashboard</span>:<span class="path"><a href="/">~</a>{% block crumbs %}{% endblock %}</span>$</div>
-  <div class="right">llb v{{ version }} · read-only</div>
+  <div class="prompt"><span class="user">llb@{{ 'lab' if lab else 'dashboard' }}</span>:<span class="path"><a href="/">~</a>{% block crumbs %}{% endblock %}</span>$</div>
+  {% if lab %}<nav class="tabs">{% for t in ["models", "chat", "test", "suites", "system"] %}<a href="/lab/{{ t }}"{% if tab == t %} class="on"{% endif %}>{{ t }}</a>{% endfor %}<a href="/"{% if not tab %} class="on"{% endif %}>results</a></nav>{% endif %}
+  <div class="right">llb v{{ version }} · {{ 'lab' if lab else 'read-only' }}</div>
 </div>
 <main>{% block body %}{% endblock %}
-<footer>llb v{{ version }} · local-llm-bench-lab · data read from SQLite, never written · <a href="/api/docs">/api/docs</a></footer>
+<footer>{% block footer %}llb v{{ version }} · local-llm-bench-lab · data read from SQLite, never written · <a href="/api/docs">/api/docs</a>{% endblock %}</footer>
 </main>
 </body>
 </html>

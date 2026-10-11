@@ -1,0 +1,64 @@
+{% extends "lab_base.html.j2" %}
+{% block scripts %}<script src="/lab/static/system.js" defer></script>{% endblock %}
+{% block style %}
+<style>
+  .row textarea { width: 300px; min-height: 58px; resize: vertical; }
+  .flags { margin-top: 10px; line-height: 1.9; }
+  .flags .tag { color: var(--fg); }
+  pre.help-text { max-height: 520px; }
+  td.tools .tag.no { color: var(--muted); text-decoration: line-through; }
+  .cmake-hint { margin-top: 8px; }
+  #t-builds td.dir { white-space: normal; min-width: 200px; max-width: 300px; word-break: break-all; }
+  #t-builds td.cmake { white-space: normal; min-width: 140px; max-width: 320px; }
+  #t-storage td.path { word-break: break-all; }
+  .tag.ok { color: var(--green); border-color: #1d4a2e; } .tag.muted { color: var(--muted); }
+</style>
+{% endblock %}
+{% block content %}
+<h1>system<span class="cursor"></span></h1>
+<p class="help">What <code>llb doctor</code>, <code>llb llama ls</code>, <code>llb llama build</code> and <code>llb llama flags</code> show, plus where the lab keeps its files and how much room is left.</p>
+
+<h2>environment</h2>
+<div class="grid2">
+  <div class="panel"><dl class="kv" id="env"><dt>llb</dt><dd class="muted">loading…</dd></dl></div>
+  <div class="panel"><dl class="kv" id="extras"></dl></div>
+</div>
+
+<h2>storage</h2>
+<div class="wrap"><table id="t-storage">
+  <thead><tr><th>what</th><th>path</th><th class="num">used</th><th class="num">free on its disk</th></tr></thead>
+  <tbody></tbody>
+</table></div>
+<p class="hint"><b>used</b> counts builds, the llama.cpp source and runs whole; for <b>models/</b> and the Hugging Face cache only GGUF files. Prune the cache from the <a href="/lab/models#prune">models</a> tab.</p>
+
+<h2>llama.cpp builds</h2>
+<p class="help">Managed builds live under <code>$LLB_HOME/builds</code>, one per commit, backend and CMake flags. A run compiles the build its profile pins by itself; here you can compile one in advance (several minutes on a Pi).</p>
+<div class="wrap"><table id="t-builds">
+  <thead><tr><th>dir</th><th>ref</th><th>commit</th><th>version</th><th>backend</th><th>cmake</th><th>tools</th><th>built</th><th></th></tr></thead>
+  <tbody></tbody>
+</table></div>
+
+<h3>build llama.cpp</h3>
+<form class="panel" id="build-form">
+  <div class="row">
+    <label>tag, branch or commit <input id="b-ref" placeholder="b6500" required maxlength="100" autocomplete="off"></label>
+    <label>backend <select id="b-backend"></select></label>
+    <label>CMake defines (KEY=VALUE, one per line) <textarea id="b-cmake" placeholder="GGML_NATIVE=OFF" spellcheck="false"></textarea></label>
+    <label>jobs <input type="number" id="b-jobs" min="1" max="1024"></label>
+    <label><span>&nbsp;</span><span><input type="checkbox" id="b-force"> force (rebuild)</span></label>
+    <button class="btn" id="b-run">build</button>
+  </div>
+  <div class="hint cmake-hint" id="b-defaults"></div>
+  <pre class="cmd" id="b-cmd"></pre>
+</form>
+
+<h2>flags</h2>
+<p class="help">The flags llb sees in a binary's <code>--help</code>: every command line is checked against them before a run, so a flag llama.cpp renamed fails early.</p>
+<form class="toolbar" id="flags-form">
+  <select class="filter" id="f-build" aria-label="build"></select>
+  <select id="f-tool" aria-label="tool"><option>llama-bench</option><option>llama-server</option></select>
+  <label class="dim"><input type="checkbox" id="f-raw"> raw --help</label>
+  <button class="btn">show</button>
+</form>
+<div id="flags-out"></div>
+{% endblock %}

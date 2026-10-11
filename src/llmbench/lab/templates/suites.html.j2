@@ -1,0 +1,108 @@
+{% extends "lab_base.html.j2" %}
+{% block scripts %}<script src="/lab/static/form.js" defer></script><script src="/lab/static/suites.js" defer></script>{% endblock %}
+{% block style %}
+<style>
+  .editor { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 14px; align-items: start; margin-top: 12px; }
+  @media (max-width: 1000px) { .editor { grid-template-columns: 1fr; } }
+  .yaml-pane { position: sticky; top: 52px; }
+  #yaml { width: 100%; height: calc(100vh - 150px); min-height: 360px; resize: vertical; tab-size: 2; white-space: pre; line-height: 1.45; }
+  #yaml-state { font-size: 12px; min-height: 18px; }
+  .form details.sec { border: 1px solid var(--line); background: var(--panel); margin: 0 0 10px; padding: 0 12px; }
+  .form details.sec > summary { color: var(--green); font-weight: 700; margin: 8px 0; }
+  .form details.sec[open] { padding-bottom: 12px; }
+  .form details.sub { border-left: 2px solid var(--line-2); padding-left: 10px; margin: 8px 0; }
+  .form details.sub > summary { color: var(--amber); margin: 4px 0; }
+  .fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px 12px; }
+  label.f { min-width: 0; }
+  label.f .k { color: var(--fg); } label.f .k.set { color: var(--amber); }
+  label.f small { color: var(--muted); font-size: 11px; line-height: 1.3; }
+  label.f input, label.f select, label.f textarea { width: 100%; }
+  textarea { resize: vertical; line-height: 1.4; }
+  .wide { grid-column: 1 / -1; }
+  .item { border: 1px dashed var(--line-2); padding: 8px; margin: 6px 0; }
+  .item .head { display: flex; justify-content: space-between; align-items: center; color: var(--dim); margin-bottom: 6px; }
+  .union { border-left: 2px solid var(--line-2); padding-left: 10px; margin: 2px 0; }
+  .union .union { margin-top: 4px; }
+  .checks { display: flex; flex-wrap: wrap; gap: 4px 14px; color: var(--fg); font-size: 12px; }
+  .checks label { display: inline-flex; gap: 5px; align-items: center; color: var(--fg); }
+  .yamlonly { color: var(--muted); font-size: 12px; }
+  .yamlonly code { white-space: pre-wrap; }
+  .tabsel { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 10px; }
+  .tabsel button { font: inherit; font-size: 12px; background: transparent; color: var(--dim); border: 1px solid var(--line-2); padding: 2px 10px; cursor: pointer; }
+  .tabsel button.on { color: var(--bg); background: var(--green); border-color: var(--green); }
+  .toolbar2 { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
+  .toolbar2 .grp { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding-right: 14px; border-right: 1px solid var(--line-2); }
+  .toolbar2 .grp:last-child { border-right: none; }
+  .toolbar2 input[type=number] { width: 70px; }
+  .dirty { color: var(--amber); }
+  details.req { border: 1px dashed var(--line-2); margin: 6px 0; padding: 0 8px; }
+  details.req[open] { padding-bottom: 8px; }
+  details.req > summary { color: var(--fg); margin: 6px 0; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  details.req > summary .muted { margin-left: 8px; }
+  .req-actions { display: flex; gap: 6px; justify-content: flex-end; margin: 4px 0 6px; }
+  #kinds label { display: flex; gap: 6px; align-items: baseline; margin: 4px 0; color: var(--fg); font-size: 13px; }
+  #kinds small { color: var(--muted); }
+  #out table { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: fixed; }
+  #out th, #out td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line); vertical-align: top; overflow-wrap: anywhere; white-space: normal; }
+  #out td summary { margin: 0; }
+  #out td pre { margin: 0; max-height: 220px; white-space: pre-wrap; word-break: break-word; }
+  #out .notes li { color: var(--dim); font-size: 12px; }
+  #out details > summary { cursor: pointer; }
+  .totals { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 6px 0; }
+  .totals b { color: var(--fg); }
+  .used { font-size: 12px; color: var(--dim); }
+</style>
+{% endblock %}
+{% block content %}
+<h1>suites<span class="cursor"></span></h1>
+<p class="help">Suites are the requests an experiment sends to llama-server: prompts with their checks (evaluators), synthetic prompts with exact token counts, or rows from a file or a Hugging Face dataset. Files live in <code id="folder"></code>, where experiments point (<code>phases.*.suites</code>), so the terminal reads the same files. Edit with the form or in the YAML on the right: both stay in sync, and the form keeps the YAML's comments. To measure a suite, add it to an experiment in the <a href="/lab/test">test</a> tab.</p>
+
+<div class="panel">
+  <div class="toolbar2">
+    <div class="grp">
+      <select id="files" aria-label="suite files"></select>
+      <button class="btn small" id="open">open</button>
+      <button class="btn small" id="new-toggle">new…</button>
+    </div>
+    <div class="grp">
+      <label class="dim">file <input id="name" placeholder="my-suite.yaml" size="26"></label>
+      <button class="btn small" id="save">save</button>
+      <span id="dirty"></span>
+    </div>
+    <div class="grp"><span class="used" id="used"></span></div>
+  </div>
+  <div id="new-box" hidden>
+    <h3>new suite</h3>
+    <div class="row"><label>name <input id="new-name" placeholder="my-suite" size="28"></label></div>
+    <p class="hint" style="margin:8px 0 2px">start from</p>
+    <div id="kinds"></div>
+    <div style="margin-top:10px"><button class="btn" id="new-create">create</button></div>
+  </div>
+</div>
+
+<div class="panel" style="margin-top:10px">
+  <div class="toolbar2">
+    <div class="grp">
+      <button class="btn small" id="check">validate &amp; preview</button>
+      <button class="btn small" id="fetch" hidden title="download the dataset into the Hugging Face cache and show its rows">fetch dataset</button>
+    </div>
+    <div class="grp">
+      <label class="dim" title="how many requests to send, from the first">requests <input type="number" id="try-limit" min="1" value="5"></label>
+      <label class="dim">temperature <input type="number" id="try-temp" min="0" max="2" step="0.1" value="0"></label>
+      <label class="dim" title="cap on the answer length; empty = the suite's max_tokens">max tokens <input type="number" id="try-max" min="1" placeholder="suite"></label>
+      <button class="btn" id="try">try it</button>
+      <span id="try-model" class="muted"></span>
+    </div>
+  </div>
+  <p class="hint" style="margin:8px 0 0"><b>validate &amp; preview</b> loads the text as <code>llb</code> would (saved or not) and lists the requests a run would send. <b>try it</b> sends the first requests to the model loaded in the <a href="/lab/chat">chat</a> and scores the answers: a quick check while writing, not a measurement (nothing is stored; measurements are experiments in the <a href="/lab/test">test</a> tab).</p>
+</div>
+<div id="out"></div>
+
+<div class="editor">
+  <div class="form" id="form"></div>
+  <div class="yaml-pane">
+    <textarea id="yaml" spellcheck="false" aria-label="suite YAML"></textarea>
+    <div id="yaml-state"></div>
+  </div>
+</div>
+{% endblock %}

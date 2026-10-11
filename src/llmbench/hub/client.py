@@ -7,6 +7,7 @@ from typing import Protocol
 
 from huggingface_hub import (
     HfApi,
+    constants,
     hf_hub_download,  # pyright: ignore[reportUnknownVariableType]
     scan_cache_dir,
     try_to_load_from_cache,
@@ -63,12 +64,25 @@ class CachedFile:
     last_accessed: datetime
 
 
+@dataclass(frozen=True)
+class RepoHit:
+    """A search result: a model repo on the Hub."""
+
+    repo: str
+    downloads: int
+    likes: int
+    pipeline: str | None
+    gated: bool
+
+
 class HubClient(Protocol):
     def list_repo(self, repo: str, revision: str | None) -> RepoListing: ...
     def cached_path(self, repo: str, file: str, commit: str) -> Path | None: ...
     def download(self, repo: str, file: str, commit: str) -> Path: ...
     def cached_files(self) -> list[CachedFile]: ...
     def delete_revisions(self, repo: str, commits: set[str]) -> int: ...
+    def search(self, query: str, limit: int) -> list[RepoHit]: ...
+    def downloading_bytes(self, repo: str) -> int: ...
 
 
 class HuggingFaceClient:
@@ -132,6 +146,28 @@ class HuggingFaceClient:
                         )
                     )
         return out
+
+    def search(self, query: str, limit: int) -> list[RepoHit]:
+        """Repos with GGUF files matching `query`, most downloaded first."""
+        try:
+            found = self.api.list_models(search=query, filter="gguf", sort="downloads", limit=limit)
+            return [
+                RepoHit(m.id, m.downloads or 0, m.likes or 0, m.pipeline_tag, bool(m.gated))
+                for m in found
+            ]
+        except (*NETWORK_ERRORS, HfHubHTTPError) as e:
+            raise HubUnavailableError(f"search {query!r}: {e}") from None
+
+    def downloading_bytes(self, repo: str) -> int:
+        """Bytes written so far by downloads in progress for `repo` (its `*.incomplete` blobs)."""
+        blobs = Path(constants.HF_HUB_CACHE) / f"models--{repo.replace('/', '--')}" / "blobs"
+        total = 0
+        for p in blobs.glob("*.incomplete"):
+            try:
+                total += p.stat().st_size
+            except OSError:
+                continue  # finished and renamed meanwhile
+        return total
 
     def delete_revisions(self, repo: str, commits: set[str]) -> int:
         """Delete whole cached revisions through huggingface_hub (it owns the blob refcounts).

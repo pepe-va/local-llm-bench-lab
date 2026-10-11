@@ -1,0 +1,48 @@
+{% extends "lab_base.html.j2" %}
+{% block scripts %}<script src="/lab/static/models.js" defer></script>{% endblock %}
+{% block style %}
+<style>
+  #inspect:empty { display: none; }
+  #inspect .panel { margin-top: 12px; }
+  #inspect pre { white-space: pre-wrap; word-break: break-word; max-height: 220px; margin: 2px 0; padding: 6px 8px; }
+  #inspect td.v { white-space: normal; word-break: break-word; max-width: 900px; }
+  #pull-form input.filter { flex-basis: 460px; }
+  #prune-form input[type=number] { width: 90px; }
+</style>
+{% endblock %}
+{% block content %}
+<h1>models<span class="cursor"></span></h1>
+<p class="help">Search Hugging Face by name (<code>qwen3 4b</code>) or paste a repo (<code>unsloth/Qwen3-4B-GGUF</code> or its URL). Only repos with <b>GGUF</b> files run on llama.cpp. <b>fits</b> compares the file plus about 1 GB of working memory with this machine's RAM.</p>
+<form class="toolbar" id="search-form">
+  <input class="filter" id="q" placeholder="search Hugging Face or paste org/repo" aria-label="search models" autocomplete="off">
+  <button class="btn">search</button>
+</form>
+<form class="toolbar" id="pull-form">
+  <input class="filter" id="pull-ref" placeholder="or pull a reference: hf://org/repo:Q4_K_M or hf://org/repo/file.gguf" aria-label="model reference" autocomplete="off" spellcheck="false">
+  <label class="dim" title="copy it into models/ after downloading: never deleted automatically"><input type="checkbox" id="pull-favorite"> ★ favorite (keep in models/)</label>
+  <button class="btn">pull</button>
+</form>
+<div id="search-results"></div>
+<div id="repo"></div>
+<div id="downloads"></div>
+
+<h2>on this machine</h2>
+<div class="wrap"><table id="t-models">
+  <thead><tr><th>model</th><th>quant</th><th class="num">size</th><th>what</th><th>fits</th><th>where</th><th></th></tr></thead>
+  <tbody></tbody>
+</table></div>
+<p class="hint">★ <b>models/</b> files are never deleted automatically. <b>cache</b> is the Hugging Face cache: deleting there removes the whole revision.</p>
+<div id="inspect"></div>
+
+<h2 id="prune">prune the Hugging Face cache</h2>
+<p class="help">Like <code>llb models prune</code>: deletes whole cached revisions with GGUF files, never <b>models/</b>. Preview first; nothing is deleted until you confirm.</p>
+<form class="panel" id="prune-form">
+  <div class="row">
+    <label>unused for at least (days) <input type="number" id="prune-days" min="0" step="1" placeholder="any"></label>
+    <label>only this repo <input id="prune-repo" list="prune-repos" placeholder="all repos" autocomplete="off" spellcheck="false"></label>
+    <datalist id="prune-repos"></datalist>
+    <button class="btn">preview</button>
+  </div>
+  <div id="prune-out"></div>
+</form>
+{% endblock %}

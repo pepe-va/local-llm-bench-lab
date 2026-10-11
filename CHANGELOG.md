@@ -7,6 +7,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- `llb lab`, a web lab that does from the browser almost everything the CLI does (ADR-0022). It includes the dashboard, and has one tab per group of commands:
+  - **models**: search Hugging Face for GGUF repos or pull an `hf://` reference, see every quantization with its size and whether it fits in RAM, download with progress, inspect the GGUF metadata, keep a model in `models/`, delete it, or prune the cache with a preview;
+  - **chat**: chat with any downloaded model through llama-server, with time to first token, tokens/s, memory and temperature for every answer, and the reasoning shown apart;
+  - **test**: an experiment editor over the files in `experiments/`. Its form is generated from the experiment schema, so it covers every field, and each llama.cpp setting shows the flag it becomes. The YAML sits beside it, both stay in sync, and comments survive. It runs `validate`, `plan`, `run` (`--resume`, `-m`, `--no-build`), `guide`, `report` and `judge`;
+  - **suites**: the same kind of editor for `suites/*.yaml`, with items, evaluators (including `all`/`any`/`weighted`) and every source type. It previews the requests a run would send, and **try it** sends them to the chat model and scores each answer;
+  - **system**: environment, extras, disk usage, llama.cpp builds, a build form with every option of `llb llama build`, and the flags each binary accepts.
+
+  One model is loaded at a time: a run, judge pass or build unloads the chat, and no chat, download or deletion starts while it runs. Long commands run as child processes that survive a restart of the lab. The lab listens on 127.0.0.1, and every action needs an `X-LLB-Lab` header, so other websites cannot trigger them.
+- `llb lab --experiments <dir>` sets the folder the test tab edits (default `experiments`).
 - Config fields' docstrings are now descriptions in the JSON schema, and evaluator and suite fields are documented, so the lab's forms can explain every field.
 - `hardware.model_retention` (`keep` by default, or `delete_after_run`) sets the retention of every model that does not set its own `retention`, so the machine profile decides whether downloaded models stay in the Hugging Face cache.
 - Release workflow (`.github/workflows/release.yml`). Pushing a `vX.Y.Z` tag runs every CI check on the tagged commit. If they pass, it publishes the GitHub Release, with the matching CHANGELOG section as notes and the wheel and sdist attached. It refuses a tag that does not match the `pyproject.toml` version or has no CHANGELOG section (ADR-0021).

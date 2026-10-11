@@ -13,6 +13,7 @@ from llmbench.hub.client import (
     HubNotFoundError,
     HubUnavailableError,
     RemoteFile,
+    RepoHit,
     RepoListing,
 )
 
@@ -125,6 +126,19 @@ class FakeHub:
                 f.path.unlink(missing_ok=True)
                 del self._cached[key]
         return freed
+
+    def search(self, query: str, limit: int) -> list[RepoHit]:
+        if not self.online:
+            raise HubUnavailableError("offline")
+        words = query.lower().split()
+        return [
+            RepoHit(repo, 1000 - i, 10, "text-generation", False)
+            for i, repo in enumerate(sorted(self.repos))
+            if all(w in repo.lower() for w in words)
+        ][:limit]
+
+    def downloading_bytes(self, repo: str) -> int:
+        return 0
 
     def age(self, days: int) -> None:
         """Pretend every cached file was last used `days` ago."""

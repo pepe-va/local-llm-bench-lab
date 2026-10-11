@@ -9,6 +9,7 @@ from llmbench import __version__
 from llmbench.cli import llama, models
 from llmbench.cli.common import console
 from llmbench.cli.judge import judge
+from llmbench.cli.lab import lab
 from llmbench.cli.plan import plan
 from llmbench.cli.report import guide, report
 from llmbench.cli.run import run
@@ -28,6 +29,7 @@ app.command()(report)
 app.command()(guide)
 app.command()(judge)
 app.command()(serve)
+app.command()(lab)
 app.add_typer(llama.app, name="llama")
 app.add_typer(models.app, name="models")
 
