@@ -248,6 +248,7 @@ select: { metric: "tps:tg128", objective: maximize }
 Run `llb validate <yaml>` after each change: it points at the exact field that is wrong. Some notes:
 
 - **Settings**: the groups under `defaults` mirror llama.cpp's options: `load`, `kv`, `gpu`, `rope`, `speculative`, `server`, `sampling`. Raw flags go in `extra_args` and environment variables in `env`. Every field is defined in [`src/llmbench/config/llama/`](src/llmbench/config/llama/). A field a tool doesn't support is reported as `ignored` (for example, `llama-bench` has no `ctx_size`).
+- **Reasoning**: `defaults.server.reasoning` (`on`, `off` or `auto`), `reasoning_budget` and `reasoning_format` control thinking in models such as Qwen3, and `chat_template_kwargs` passes options like `{ enable_thinking: false }` to the template. Thinking tokens count towards a suite's `max_tokens` and delay the visible answer, so they change both latency and quality results. The reasoning text is stored apart from the answer.
 - **Matrix**: `exclude` removes combinations and `include` adds them. Every model and build is crossed with every variant.
 - **Models**: `source` can take three forms:
   - `hf://org/repo:QUANT`, optionally pinned with `@<commit>` after the repo;
@@ -305,9 +306,16 @@ A failed run never stops the experiment: its error is stored and the rest contin
 
 ```bash
 uv run llb models pull hf://unsloth/Qwen3-1.7B-GGUF:Q4_K_M --favorite
-uv run llb models inspect hf://unsloth/Qwen3-1.7B-GGUF:Q4_K_M    # GGUF metadata, never downloads
+uv run llb models inspect hf://unsloth/Qwen3-1.7B-GGUF:Q4_K_M    # GGUF metadata of a model already on disk
 uv run llb models prune --older-than 30 --dry-run                # free cache space
 ```
+
+`llb models inspect` reads the GGUF header of a model that is already in `models/` or the cache, or of a local file. It never downloads, so pull the model first. It shows the architecture, name, size, quantization, parameter count, context length, layers, attention heads and, for mixture-of-experts models, the expert counts. It does not say whether a model reasons or what kind of model it is. `--raw` prints every metadata key, where you can tell:
+
+- **reasoning**: `tokenizer.chat_template` mentions `<think>` or `enable_thinking` (Qwen3, for example);
+- **base or chat**: a base model usually has no `tokenizer.chat_template`;
+- **embeddings or reranking**: `<architecture>.pooling_type` is usually set;
+- **vision**: not in the model's GGUF; the repo ships a separate `mmproj-*.gguf`.
 
 ### Configuration
 

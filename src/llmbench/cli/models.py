@@ -74,7 +74,7 @@ def inspect(
     ref: RefArg,
     raw: Annotated[bool, typer.Option("--raw", help="Print every metadata key.")] = False,
 ) -> None:
-    """Show GGUF metadata (architecture, params, quant, context...). Never downloads."""
+    """Show GGUF metadata (architecture, params, quant...) of a model on disk. Never downloads."""
     try:
         r = ModelStore(allow_download=False).resolve(ModelSpec(id="inspect", source=ref))
         info = read_gguf(r.shards)
