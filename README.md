@@ -27,6 +27,7 @@ It was designed for a Raspberry Pi 5 first, and it works on any Linux PC, includ
   - [2. Run your first experiment](#2-run-your-first-experiment)
   - [3. Look at the results](#3-look-at-the-results)
   - [On a Raspberry Pi 5](#on-a-raspberry-pi-5)
+  - [The lab: try any model from the browser](#the-lab-try-any-model-from-the-browser)
 - [Going further](#going-further)
   - [What it measures](#what-it-measures)
   - [Example experiments](#example-experiments)
@@ -140,6 +141,49 @@ uv run llb run experiments/pi5-threads.yaml           # best thread count
 uv run llb run experiments/pi5-latency.yaml           # time to first token and generation speed
 ```
 
+### The lab: try any model from the browser
+
+`llb lab` does from the browser almost everything the CLI does. Each tab covers a group of commands:
+
+| Tab | What you do there | CLI equivalent |
+|---|---|---|
+| **models** | Search Hugging Face by name or paste a repo (or pull an `hf://` reference), see every quantization with its size and whether it fits in RAM, download it, inspect its GGUF metadata, keep it in `models/`, delete it, or prune the cache | `llb models pull/ls/inspect/favorite/unfavorite/prune` |
+| **chat** | Talk to any downloaded model. Every answer shows time to first token, tokens/s, memory and CPU temperature, with the reasoning of thinking models apart | `llama-server` by hand |
+| **test** | Edit experiments with a form generated from the YAML schema (every field, with the llama.cpp flag it becomes) or in the YAML itself; both stay in sync and comments survive. Then validate, plan, run (`--resume`, `-m`, `--no-build`), guide, report and judge | `llb validate/plan/run/guide/report/judge` |
+| **suites** | Write the tests themselves: prompts with their checks (exact, contains, regex, JSON schema, all/any/weighted…), synthetic prompts, files or Hugging Face datasets. Preview the requests a run would send, and **try it** against the chat model to see each answer scored | editing `suites/*.yaml` by hand |
+| **system** | Environment, extras, disk usage, llama.cpp builds, compile one with every option, and the flags each binary accepts | `llb doctor`, `llb llama ls/build/flags` |
+| **results** | The dashboard: compare experiments, charts, runs | `llb serve` |
+
+The experiments and suites are the files in `experiments/` and `suites/`, so the lab and the terminal work on the same YAML. Results land in the **results** tab.
+
+```bash
+uv run llb lab                                        # http://127.0.0.1:8765/lab, from the repository root
+```
+
+The lab loads one model at a time. A run, a judge pass or a llama.cpp build unloads the chat first, and no chat, download or deletion starts while it runs. Only repos with GGUF files run on llama.cpp; most models have a GGUF version (unsloth, bartowski, the model's own org…).
+
+The lab listens on 127.0.0.1 only, because it has no authentication and can download and run things. To reach it from your other devices, use an SSH tunnel or [Tailscale](https://tailscale.com/kb/1242/tailscale-serve), which adds HTTPS and lets in only your own devices:
+
+```bash
+sudo tailscale serve --bg --https=443 http://127.0.0.1:8765   # https://<machine>.<tailnet>.ts.net/lab
+```
+
+To keep it running on a Pi, a systemd user service is enough (`sudo loginctl enable-linger $USER` once, so it keeps running after you log out):
+
+```ini
+# ~/.config/systemd/user/llb-lab.service, then: systemctl --user enable --now llb-lab
+[Unit]
+Description=llb lab
+
+[Service]
+WorkingDirectory=%h/local-llm-bench-lab
+ExecStart=%h/.local/bin/uv run --no-sync llb lab
+Restart=on-failure
+
+[Install]
+WantedBy=default.target
+```
+
 ## Going further
 
 ### What it measures
@@ -230,6 +274,7 @@ Run `llb validate <yaml>` after each change: it points at the exact field that i
 | `llb guide <yaml>` | Applies the gates, picks the winner and writes `guidance.md`. Exits with 1 if nothing passes. |
 | `llb judge <yaml>` | Runs the LLM judge over pending answers |
 | `llb serve` | Starts the read-only web dashboard: compare experiments, see each one's plan, hardware, explained charts and runs, sort and filter every table |
+| `llb lab [--llama-server <bin>] [--experiments <dir>]` | Starts the lab: models from Hugging Face, chat with live metrics, editors for experiments and suites that run every experiment command, llama.cpp builds, and the dashboard |
 | `llb llama build --ref <tag> [--backend cuda]` / `llama ls` | Compiles llama.cpp and lists the builds |
 | `llb models pull\|ls\|inspect\|favorite\|unfavorite\|prune` | Manages GGUF models |
 | `llb doctor` | Shows the environment |
@@ -278,7 +323,7 @@ Optional extras for `uv sync`:
 | Extra | Enables |
 |---|---|
 | `report` | HTML and PNG reports |
-| `serve` | The dashboard |
+| `serve` | The dashboard and the lab |
 | `hf-datasets` | Suites built from Hugging Face datasets or parquet files |
 | `lm-eval` | The `lm_eval` phase |
 
