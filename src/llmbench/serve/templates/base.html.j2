@@ -103,7 +103,7 @@
 <div class="term-bar">
   <div class="dots"><i></i><i></i><i></i></div>
   <div class="prompt"><span class="user">llb@{{ 'lab' if lab else 'dashboard' }}</span>:<span class="path"><a href="/">~</a>{% block crumbs %}{% endblock %}</span>$</div>
-  {% if lab %}<nav class="tabs">{% for t in ["models", "chat", "test", "suites", "system"] %}<a href="/lab/{{ t }}"{% if tab == t %} class="on"{% endif %}>{{ t }}</a>{% endfor %}<a href="/"{% if not tab %} class="on"{% endif %}>results</a></nav>{% endif %}
+  {% if lab %}<nav class="tabs">{% for t in ["models", "chat", "test", "suites", "system", "info"] %}<a href="/lab/{{ t }}"{% if tab == t %} class="on"{% endif %}>{{ t }}</a>{% endfor %}<a href="/"{% if not tab %} class="on"{% endif %}>results</a></nav>{% endif %}
   <div class="right">llb v{{ version }} · {{ 'lab' if lab else 'read-only' }}</div>
 </div>
 <main>{% block body %}{% endblock %}

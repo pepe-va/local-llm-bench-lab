@@ -28,6 +28,7 @@ from llmbench.lab.chat import ChatSettings
 from llmbench.lab.editor import EditorError, parse, patch
 from llmbench.lab.jobs import LabBusyError
 from llmbench.lab.state import Lab, LabError
+from llmbench.lab.suites import EVALUATOR_GUIDE
 from llmbench.paths import runs_dir
 from llmbench.serve.app import create_app, discover
 
@@ -77,6 +78,8 @@ class NewReq(BaseModel):
     models: list[str] = []
     profile: str | None = None
     presets: list[str] = []
+    suites: list[str] = []
+    """Paths relative to the experiments folder, as `/lab/api/editor/meta` lists them."""
 
 
 class SaveReq(BaseModel):
@@ -153,6 +156,12 @@ def create_lab_app(  # noqa: PLR0915 (route table: one function per endpoint)
     @app.get("/lab/test", response_class=HTMLResponse)
     def test_tab() -> HTMLResponse:
         return tab("test")
+
+    @app.get("/lab/info", response_class=HTMLResponse)
+    def info_tab() -> HTMLResponse:
+        page = env.get_template("info.html.j2")
+        html = page.render(version=__version__, tab="info", evaluators=EVALUATOR_GUIDE)
+        return HTMLResponse(html)
 
     @app.get("/lab/static/{name}")
     def lab_static(name: str) -> Response:
@@ -248,7 +257,7 @@ def create_lab_app(  # noqa: PLR0915 (route table: one function per endpoint)
 
     @app.post("/lab/api/editor/new")
     def editor_new(req: NewReq) -> JSONResponse:
-        text = call(lambda: lab.new_experiment(req.models, req.profile, req.presets))
+        text = call(lambda: lab.new_experiment(req.models, req.profile, req.presets, req.suites))
         return JSONResponse({"text": text, "doc": parse(text)})
 
     @app.post("/lab/api/editor/save")

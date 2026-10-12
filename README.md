@@ -156,6 +156,7 @@ uv run llb run experiments/pi5-latency.yaml           # time to first token and 
 | **test** | Edit experiments with a form generated from the YAML schema (every field, with the llama.cpp flag it becomes) or in the YAML itself; both stay in sync and comments survive. Then validate, plan, run (`--resume`, `-m`, `--no-build`), guide, report and judge | `llb validate/plan/run/guide/report/judge` |
 | **suites** | Write the tests themselves: prompts with their checks (exact, contains, regex, JSON schema, all/any/weighted…), synthetic prompts, files or Hugging Face datasets. Preview the requests a run would send, and **try it** against the chat model to see each answer scored | editing `suites/*.yaml` by hand |
 | **system** | Environment, extras, disk usage, llama.cpp builds, compile one with every option, and the flags each binary accepts | `llb doctor`, `llb llama ls/build/flags` |
+| **info** | The user manual: first steps, concepts, recipes (Q4 or Q8? how many threads? my own Spanish questions), what each metric means, and fixes for common problems | this README |
 | **results** | The dashboard: compare experiments, charts, runs | `llb serve` |
 
 The experiments and suites are the files in `experiments/` and `suites/`, so the lab and the terminal work on the same YAML. Results land in the **results** tab.
@@ -176,7 +177,7 @@ uv run llb lab                                        # http://127.0.0.1:8765/la
 
 ![The test tab: an experiment in the form and in YAML, with the validate, plan, run, guide, report and judge buttons](assets/screenshots/lab-test.png)
 
-**suites**: write a test suite and **try it** on the chat model before measuring: each answer is scored by the suite's checks.
+**suites**: write a test suite and **try it** on the chat model before measuring: each answer is scored by the suite's checks. New suites start from templates (one in Spanish), an evaluator cheat sheet says which check fits each case and drops its example into the open item, and **use in an experiment** opens the test tab with the suite already in place. A short guide on both tabs explains how suites, experiments and results fit together.
 
 ![The suites tab: trying es-writing.yaml on Qwen3-0.6B, with each answer's score](assets/screenshots/lab-suites.png)
 

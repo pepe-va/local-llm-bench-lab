@@ -269,11 +269,20 @@ class Lab:
             "default_ref": default_ref(self.experiments.folder / default) if default else "master",
         }
 
-    def new_experiment(self, keys: list[str], profile: str | None, presets: list[str]) -> str:
+    def new_experiment(
+        self,
+        keys: list[str],
+        profile: str | None,
+        presets: list[str],
+        suites: list[str] | None = None,
+    ) -> str:
         models = [self.model(k) for k in keys]
+        known = set(self.experiments.suites())
+        if unknown := [s for s in suites or [] if s not in known]:
+            raise LabError(f"unknown suite(s): {', '.join(unknown)}")
         doc = editor.new_experiment(
             models, folder=self.experiments.folder, root=self.root, profile=profile,
-            presets=presets,
+            presets=presets, suites=suites,
         )  # fmt: skip
         return editor.dump(doc)
 

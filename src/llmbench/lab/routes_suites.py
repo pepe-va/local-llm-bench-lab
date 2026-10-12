@@ -21,7 +21,7 @@ from llmbench import __version__
 from llmbench.config.suite import Suite
 from llmbench.lab import suites as logic
 from llmbench.lab.chat import ChatServer
-from llmbench.lab.editor import EditorError, parse, patch
+from llmbench.lab.editor import EditorError, dump, parse, patch
 from llmbench.lab.state import Lab
 
 NO_STORE = {"Cache-Control": "no-store"}
@@ -89,6 +89,15 @@ def register(app: FastAPI, lab: Lab, env: jinja2.Environment) -> None:
                 "files": files.files(),
                 "used_by": files.used_by(),
                 "kinds": [{"key": k.key, "title": k.title, "help": k.help} for k in logic.KINDS],
+                "evaluators": [
+                    {
+                        "type": t.type,
+                        "use_when": t.use_when,
+                        "example": t.example,
+                        "yaml": dump({"evaluator": t.example}),
+                    }
+                    for t in logic.EVALUATOR_GUIDE
+                ],
                 "try_max": logic.TRY_MAX,
             },
             headers=NO_STORE,

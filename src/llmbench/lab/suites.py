@@ -73,6 +73,61 @@ class Kind:
 
 KINDS = [
     Kind(
+        "chat-es",
+        "Spanish prompts with checks",
+        "Hand-written prompts in Spanish (like es-writing.yaml): correcting, summarising, "
+        "rules the answer must follow. Each item shows a different kind of check.",
+        """\
+# {name}: tareas en español con comprobaciones deterministas.
+# Cada item usa un tipo de evaluador distinto: copia el que se parezca a lo que quieres medir.
+version: 1
+name: {name}
+description: Qué miden estas peticiones.
+endpoint: chat
+system: >-
+  Eres un asistente experto en español. Responde solo con lo que se pide, sin explicaciones.
+max_tokens: 256
+source:
+  items:
+    - id: capital
+      category: datos
+      prompt: ¿Cuál es la capital de Portugal? Responde con una sola palabra.
+      reference: Lisboa
+      evaluator: {{ type: exact, normalize: [strip, lower, strip_punct, strip_accents] }}
+    - id: correccion
+      category: correccion
+      input: Haber si mañana podemos quedar.
+      prompt: |
+        Corrige las faltas de ortografía del texto.
+
+        Texto: Haber si mañana podemos quedar.
+      evaluator:
+        type: all
+        of:
+          - {{ type: contains, values: [A ver si] }}
+          - {{ type: not_contains, values: [Haber si] }}
+    - id: resumen
+      category: resumen
+      input: >-
+        La reunión del lunes se aplaza al miércoles porque el informe de ventas no estará
+        listo a tiempo y el equipo de finanzas necesita revisarlo antes.
+      prompt: |
+        Resume el texto en una sola frase.
+
+        Texto: La reunión del lunes se aplaza al miércoles porque el informe de ventas no
+        estará listo a tiempo y el equipo de finanzas necesita revisarlo antes.
+      evaluator:
+        type: all
+        of:
+          - {{ type: contains, values: [miércoles] }}
+          - {{ type: length, max_words: 25 }}
+    - id: lista
+      category: formato
+      prompt: Escribe exactamente tres frutas, separadas por comas y sin nada más.
+      evaluator: {{ type: regex, pattern: '^\\s*[^,]+,[^,]+,[^,]+\\s*$', mode: fullmatch }}
+""",
+    ),
+    Kind(
         "chat",
         "chat items with checks",
         "Hand-written prompts sent to the chat endpoint, each with deterministic checks "
@@ -206,6 +261,111 @@ source:
 """,
     ),
 ]
+
+
+@dataclass(frozen=True)
+class EvaluatorTip:
+    """One row of the evaluator cheat sheet: when to use a type, and a valid example."""
+
+    type: str
+    use_when: str
+    example: dict[str, Any]
+
+
+EVALUATOR_GUIDE = [
+    EvaluatorTip(
+        "exact",
+        "There is one right answer, and normalizing (case, accents, punctuation) "
+        "is enough to compare it. Expected text: `value`, or the item's `reference`.",
+        {"type": "exact", "normalize": ["strip", "lower", "strip_punct", "strip_accents"]},
+    ),
+    EvaluatorTip(
+        "contains",
+        "The answer must mention some words or phrases, wherever they are. "
+        "`mode: any` passes with one of them; the score is the share found.",
+        {"type": "contains", "values": ["miércoles", "informe"], "mode": "all"},
+    ),
+    EvaluatorTip(
+        "not_contains",
+        "Some text must not appear: the error you asked to fix, a forbidden "
+        "word, an English answer to a Spanish prompt.",
+        {"type": "not_contains", "values": ["Haber si", "aver"]},
+    ),
+    EvaluatorTip(
+        "regex",
+        "The answer must follow a format: a date, a list of three, one word. "
+        "`fullmatch` checks the whole answer, `search` any part of it.",
+        {"type": "regex", "pattern": "^\\d{4}-\\d{2}-\\d{2}$", "mode": "fullmatch"},
+    ),
+    EvaluatorTip(
+        "regex_extract",
+        "The answer reasons first and gives a result at the end (maths): "
+        "extract it and compare it with the reference, as text or as a number.",
+        {"type": "regex_extract", "pattern": "####\\s*(-?[\\d.,]+)", "compare": "numeric"},
+    ),
+    EvaluatorTip(
+        "length",
+        "Summaries and rewrites: limit words or characters, or compare the length "
+        "with the item's `input` (`ratio_to`), e.g. at most half of it.",
+        {"type": "length", "ratio_to": "input", "max_ratio": 0.5},
+    ),
+    EvaluatorTip(
+        "json_schema",
+        "The model must answer with JSON (or a ```json block) of a given "
+        "shape: extraction, tool-like outputs.",
+        {
+            "type": "json_schema",
+            "schema": {
+                "type": "object",
+                "required": ["nombre", "edad"],
+                "properties": {"nombre": {"type": "string"}, "edad": {"type": "integer"}},
+            },
+        },
+    ),
+    EvaluatorTip(
+        "llm_judge",
+        "Quality no rule can check (grammar, naturalness, faithfulness). "
+        "A stronger model rates it 1-5 later, with `llb judge`; stored apart.",
+        {"type": "llm_judge", "criteria": ["grammar", "clarity", "faithfulness"]},
+    ),
+    EvaluatorTip(
+        "all",
+        "Several checks at once, all required: e.g. mentions the key fact and stays "
+        "short. The score is the lowest part's.",
+        {
+            "type": "all",
+            "of": [
+                {"type": "contains", "values": ["miércoles"]},
+                {"type": "length", "max_words": 25},
+            ],
+        },
+    ),
+    EvaluatorTip(
+        "any",
+        "Several acceptable answers in different forms: passes if one check passes.",
+        {
+            "type": "any",
+            "of": [
+                {"type": "exact", "value": "Lisboa"},
+                {"type": "contains", "values": ["Lisbon"]},
+            ],
+        },
+    ),
+    EvaluatorTip(
+        "weighted",
+        "Partial credit: some checks matter more than others. Passes when the "
+        "weighted mean reaches `pass_threshold`.",
+        {
+            "type": "weighted",
+            "pass_threshold": 0.7,
+            "of": [
+                {"weight": 3, "evaluator": {"type": "contains", "values": ["A ver si"]}},
+                {"weight": 1, "evaluator": {"type": "length", "max_words": 30}},
+            ],
+        },
+    ),
+]
+"""Every example is validated against `EvaluatorSpec` in the tests."""
 
 
 def new_suite(kind: str, name: str) -> str:

@@ -279,7 +279,11 @@ function renderNewBox() {
   if (meta.default_profile) $("new-profile").value = meta.default_profile;
   const wanted = param("model");
   $("new-models").replaceChildren(...(localModels.length ? localModels.map((m) => el("label", {}, el("input", { type: "checkbox", value: m.key, checked: m.key === wanted }), `${m.name} · ${m.quant}`)) : [el("span", { class: "muted", text: "no models downloaded yet: add references in the form afterwards" })]));
-  $("new-presets").replaceChildren(...meta.presets.map((p, i) => el("label", { title: p.help }, el("input", { type: "checkbox", value: p.key, checked: i < 2 }), p.title)));
+  // coming from the suites tab with a suite: start from it rather than from the presets
+  const suite = param("suite");
+  $("new-presets").replaceChildren(...meta.presets.map((p, i) => el("label", { title: p.help }, el("input", { type: "checkbox", value: p.key, checked: !suite && i < 2 }), p.title)));
+  const name = (rel) => rel.split("/").pop();
+  $("new-suites").replaceChildren(...meta.suites.map((rel) => el("label", { title: rel }, el("input", { type: "checkbox", value: rel, checked: name(rel) === suite }), name(rel).replace(/\.ya?ml$/, ""))));
 }
 
 async function createNew() {
@@ -288,6 +292,7 @@ async function createNew() {
     models: [...$("new-models").querySelectorAll("input:checked")].map((c) => c.value),
     profile: $("new-profile").value || null,
     presets: [...$("new-presets").querySelectorAll("input:checked")].map((c) => c.value),
+    suites: [...$("new-suites").querySelectorAll("input:checked")].map((c) => c.value),
   };
   const r = await act(() => api("POST", "/lab/api/editor/new", body));
   if (!r) return;
@@ -352,6 +357,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   if (param("file")) await openFile(param("file"));
   else if (param("model")) await createNew();
   else {
+    if (!param("suite")) $("howto").open = true; // nothing open yet: start with how it all fits
     $("new-box").hidden = false;
     $("form").replaceChildren(el("p", { class: "muted", text: "Open an experiment above, or create a new one." }));
     renderDirty();

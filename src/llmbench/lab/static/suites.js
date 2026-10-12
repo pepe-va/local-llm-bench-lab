@@ -332,6 +332,39 @@ async function createNew() {
   renderUsed();
 }
 
+// -- evaluator cheat sheet and the way to an experiment -----------------------------------
+
+// "use `x` here" -> text and <code> nodes (never HTML)
+const withCode = (s) => s.split("`").map((part, i) => (i % 2 ? el("code", { text: part }) : part));
+
+function renderCheats() {
+  $("cheat-list").replaceChildren(...meta.evaluators.map((t) => el("tr", {},
+    el("td", {}, el("b", { text: t.type })),
+    el("td", { class: "use" }, withCode(t.use_when)),
+    el("td", {}, el("pre", { text: t.yaml.trimEnd() })),
+    el("td", {}, el("button", { class: "btn small", type: "button", onclick: () => useEvaluator(t), text: "use" })),
+  )));
+}
+
+async function useEvaluator(t) {
+  if (!Form.doc || !Object.keys(Form.doc).length) return say("Open or create a suite first.");
+  const items = getAt(Form.doc, ["source", "items"]);
+  const open = Array.isArray(items) ? [...openItems].filter((i) => i < items.length) : [];
+  const [path, label] = open.length === 1
+    ? [["source", "items", open[0], "evaluator"], `item #${open[0] + 1}`]
+    : [["evaluator"], "the default evaluator"];
+  const cur = getAt(Form.doc, path);
+  if (cur && !confirm(`Replace the evaluator of ${label} (${evalLabel(cur)}) with this ${t.type}?`)) return;
+  if (path[0] === "evaluator") Form.openSections.add("evaluator");
+  await change(path, t.example, { rerender: true });
+  say(`${t.type} set on ${label}: adjust its values in the form`, true);
+}
+
+async function useInExperiment() {
+  const name = !$("name").value.trim() || text !== saved ? await save() : $("name").value.trim();
+  if (name) location.href = `/lab/test?suite=${encodeURIComponent(name)}`;
+}
+
 // -- validate & preview -----------------------------------------------------------------
 
 function closeButton() {
@@ -548,6 +581,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   $("try-limit").max = String(meta.try_max);
   renderFiles(meta.files, param("file"));
   renderKinds();
+  renderCheats();
+  $("use-in-exp").addEventListener("click", useInExperiment);
 
   $("yaml").addEventListener("input", onYamlInput);
   $("yaml").addEventListener("keydown", (e) => {
@@ -572,6 +607,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   if (param("file")) await openFile(param("file"));
   else {
+    $("howto").open = true; // nothing open yet: start with how it all fits together
     $("new-box").hidden = false;
     $("form").replaceChildren(el("p", { class: "muted", text: "Open a suite above, or create a new one." }));
     renderDirty();

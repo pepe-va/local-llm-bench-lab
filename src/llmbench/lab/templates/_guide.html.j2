@@ -1,0 +1,47 @@
+{# How testing works: suites -> experiments -> results. `here` is the tab showing it. The
+   <pre data-example> blocks are validated against the real schemas in the tests. #}
+<details class="guide" id="howto">
+  <summary>how testing works: suites → experiments → results</summary>
+  <ol class="steps">
+    <li class="{{ 'on' if here == 'suites' }}">
+      <b>1 · write a suite</b> in <a href="/lab/suites">suites</a>: the requests and how each answer is scored.
+      An item is a <code>prompt</code>, optionally the expected answer (<code>reference</code>), and an
+      <code>evaluator</code>: the check that scores the answer from 0 to 1 and says pass or fail.
+      Before measuring anything, <b>try it</b> on the chat model to see whether your checks score answers the way you expect.
+    </li>
+    <li class="{{ 'on' if here == 'test' }}">
+      <b>2 · use it in an experiment</b> in <a href="/lab/test">test</a>: which models and llama.cpp settings answer the suite,
+      and which phases run. <b>quality</b> scores answers, <b>latency</b> times them (synthetic suites),
+      <b>bench</b> measures raw speed and needs no suite. The <b>matrix</b> varies settings (threads, KV cache…) to compare them.
+    </li>
+    <li>
+      <b>3 · run it and compare</b> in <a href="/">results</a>: score and pass rate per configuration, next to speed,
+      latency and memory. <b>gates</b> set pass/fail thresholds, and <b>guide</b> picks the winner and its llama-server command.
+    </li>
+  </ol>
+  <div class="examples">
+    <div>
+      <p class="hint">the smallest suite: one question, one check</p>
+      <pre data-example="suite">version: 1
+name: capitals
+endpoint: chat
+source:
+  items:
+    - prompt: What is the capital of France? Answer with one word.
+      reference: Paris
+      evaluator: { type: exact, normalize: [strip, lower, strip_punct] }</pre>
+    </div>
+    <div>
+      <p class="hint">an experiment that scores it with two quantizations</p>
+      <pre data-example="experiment">version: 1
+extends: [_profiles/pc.yaml]
+experiment: { name: capitals-q4-vs-q8 }
+models:
+  - { id: q4, source: "hf://unsloth/Qwen3-0.6B-GGUF:Q4_K_M" }
+  - { id: q8, source: "hf://unsloth/Qwen3-0.6B-GGUF:Q8_0" }
+phases:
+  bench: { enabled: false }
+  quality: { enabled: true, suites: [../suites/capitals.yaml] }</pre>
+    </div>
+  </div>
+</details>

@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 
 from llmbench.config.evaluators import All, Contains, Length, Weighted, WeightedPart
 from llmbench.config.loader import load_suite
-from llmbench.config.suite import HfDataset
+from llmbench.config.suite import HfDataset, Suite
 from llmbench.data.hf_datasets import DatasetError, LoadedDataset
 from llmbench.hub.store import ModelStore
 from llmbench.lab import suites as logic
@@ -137,9 +137,8 @@ def test_every_new_suite_kind_is_valid(tmp_path: Path) -> None:
         text = logic.new_suite(kind.key, f"k-{kind.key}")
         suite = files.load(text)
         assert suite.name == f"k-{kind.key}"
-        assert logic.source_kind(suite) == kind.key.replace("chat", "items").replace(
-            "embeddings", "items"
-        ).replace("rerank", "items")
+        inline = ("chat", "chat-es", "embeddings", "rerank")
+        assert logic.source_kind(suite) == ("items" if kind.key in inline else kind.key)
     with pytest.raises(logic.EditorError):
         logic.new_suite("nope", "x")
     with pytest.raises(logic.EditorError):
@@ -375,3 +374,55 @@ def test_try_stops_when_the_chat_goes(chat_ready: TestClient, lab: Lab) -> None:
     assert "result" in out[1]
     assert out[-1]["error"] == "stopped: the chat model was unloaded"
     assert out[-1]["totals"]["sent"] == 1
+
+
+# -- help for writing tests ---------------------------------------------------------
+
+
+def test_every_evaluator_has_a_valid_example() -> None:
+    from pydantic import TypeAdapter  # noqa: PLC0415
+
+    from llmbench.config.evaluators import EvaluatorSpec  # noqa: PLC0415
+
+    adapter: TypeAdapter[object] = TypeAdapter(EvaluatorSpec)
+    schema: dict[str, Any] = adapter.json_schema()
+    union = schema["$defs"][schema["$ref"].rsplit("/", 1)[-1]]  # the type alias is a $ref
+    declared = set(union["discriminator"]["mapping"])
+    # a new evaluator type needs its row in the cheat sheet
+    assert {t.type for t in logic.EVALUATOR_GUIDE} == declared
+    for tip in logic.EVALUATOR_GUIDE:
+        adapter.validate_python(tip.example)
+
+
+def test_meta_serves_the_cheat_sheet_and_the_spanish_template(client: TestClient) -> None:
+    meta = client.get("/lab/api/suites/meta").json()
+    first = meta["evaluators"][0]
+    assert first["type"] == "exact"
+    assert first["yaml"].startswith("evaluator:")
+    assert "chat-es" in [k["key"] for k in meta["kinds"]]
+    page = client.get("/lab/suites").text
+    assert 'id="cheats"' in page
+    assert "how testing works" in page
+
+
+def test_the_guide_examples_are_valid(client: TestClient, tmp_path: Path) -> None:
+    import html  # noqa: PLC0415
+    import re  # noqa: PLC0415
+
+    from llmbench.config.loader import load_experiment  # noqa: PLC0415
+
+    page = client.get("/lab/test").text
+    blocks = {
+        k: html.unescape(v)
+        for k, v in re.findall(r'<pre data-example="(\w+)">(.*?)</pre>', page, re.S)
+    }
+    Suite.model_validate(logic.parse(blocks["suite"]))
+    repo = tmp_path / "guide"
+    (repo / "experiments").mkdir(parents=True)
+    (repo / "experiments" / "_profiles").symlink_to(REPO / "experiments" / "_profiles")
+    (repo / "suites").mkdir()
+    (repo / "suites" / "capitals.yaml").write_text(blocks["suite"])
+    exp = repo / "experiments" / "capitals.yaml"
+    exp.write_text(blocks["experiment"])
+    loaded = load_experiment(exp)
+    assert [p.name for p in loaded.phases.quality.suites] == ["capitals.yaml"]

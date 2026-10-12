@@ -15,6 +15,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   - **system**: environment, extras, disk usage, llama.cpp builds, a build form with every option of `llb llama build`, and the flags each binary accepts.
 
   One model is loaded at a time: a run, judge pass or build unloads the chat, and no chat, download or deletion starts while it runs. Long commands run as child processes that survive a restart of the lab. The lab listens on 127.0.0.1, and every action needs an `X-LLB-Lab` header, so other websites cannot trigger them.
+- Help for writing tests in the lab: a guide on the suites and test tabs (suites → experiments → results, with a minimal suite and experiment), an evaluator cheat sheet that says when to use each check and inserts its example, a Spanish suite template, and **use in an experiment**, which starts a new experiment with the suite in the right phase (synthetic suites in latency, others in quality). New experiments can include any suites.
+- An **info** tab in the lab: the user manual, with first steps, concepts, recipes, what each metric means, the evaluators, the rules the lab follows and common problems. A test keeps it honest: its links work, it covers every tab and evaluator, and every metric it names exists.
 - `llb lab --experiments <dir>` sets the folder the test tab edits (default `experiments`).
 - Config fields' docstrings are now descriptions in the JSON schema, and evaluator and suite fields are documented, so the lab's forms can explain every field.
 - `hardware.model_retention` (`keep` by default, or `delete_after_run`) sets the retention of every model that does not set its own `retention`, so the machine profile decides whether downloaded models stay in the Hugging Face cache.

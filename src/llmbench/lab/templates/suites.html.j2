@@ -57,6 +57,13 @@
 <h1>suites<span class="cursor"></span></h1>
 <p class="help">Suites are the requests an experiment sends to llama-server: prompts with their checks (evaluators), synthetic prompts with exact token counts, or rows from a file or a Hugging Face dataset. Files live in <code id="folder"></code>, where experiments point (<code>phases.*.suites</code>), so the terminal reads the same files. Edit with the form or in the YAML on the right: both stay in sync, and the form keeps the YAML's comments. To measure a suite, add it to an experiment in the <a href="/lab/test">test</a> tab.</p>
 
+{% with here = "suites" %}{% include "_guide.html.j2" %}{% endwith %}
+<details class="guide" id="cheats">
+  <summary>evaluator cheat sheet: which check to use</summary>
+  <p class="hint"><b>use</b> puts the example on the item you have open (open just one), or else on the suite's default evaluator, which scores every item without its own. Edit the values afterwards in the form or the YAML.</p>
+  <div class="wrap"><table class="cheats"><thead><tr><th>type</th><th>use it when</th><th>example</th><th></th></tr></thead><tbody id="cheat-list"></tbody></table></div>
+</details>
+
 <div class="panel">
   <div class="toolbar2">
     <div class="grp">
@@ -69,7 +76,7 @@
       <button class="btn small" id="save">save</button>
       <span id="dirty"></span>
     </div>
-    <div class="grp"><span class="used" id="used"></span></div>
+    <div class="grp"><span class="used" id="used"></span><button class="btn small" id="use-in-exp" title="save, then start a new experiment with this suite in the test tab">use in an experiment →</button></div>
   </div>
   <div id="new-box" hidden>
     <h3>new suite</h3>

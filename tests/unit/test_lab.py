@@ -354,3 +354,55 @@ def test_a_restarted_lab_adopts_a_running_job(tmp_path: Path) -> None:
     finally:
         sleeper.kill()
         sleeper.wait()
+
+
+def test_new_experiment_puts_each_suite_in_its_phase(
+    client: TestClient, root: Path, chat_model: Path
+) -> None:
+    (root / "suites").mkdir()
+    (root / "suites" / "syn.yaml").write_text(
+        "name: syn\nsource:\n  synthetic: {prompt_tokens: 64, output_tokens: 8, count: 2}\n"
+    )
+    (root / "suites" / "qa.yaml").write_text(
+        "name: qa\nendpoint: chat\nsource:\n  items:\n    - {prompt: hi, reference: hi}\n"
+    )
+    meta = client.get("/lab/api/editor/meta").json()
+    assert meta["suites"] == ["../suites/qa.yaml", "../suites/syn.yaml"]
+    key = model_key(client, where="local")
+    body = {"models": [key], "profile": "_profiles/fake.yaml", "suites": meta["suites"]}
+    doc = client.post("/lab/api/editor/new", json=body, headers=ACT).json()["doc"]
+    assert doc["phases"]["quality"] == {"enabled": True, "suites": ["../suites/qa.yaml"]}
+    assert doc["phases"]["latency"] == {"enabled": True, "suites": ["../suites/syn.yaml"]}
+    assert doc["phases"]["bench"] == {"enabled": False}  # no preset asked for speed
+
+    bad = client.post(
+        "/lab/api/editor/new", json={**body, "suites": ["../../etc/passwd"]}, headers=ACT
+    )
+    assert bad.status_code == 400
+
+
+def test_the_manual_covers_every_tab_and_its_links_work(client: TestClient) -> None:
+    import re  # noqa: PLC0415
+
+    from llmbench.lab.suites import EVALUATOR_GUIDE  # noqa: PLC0415
+
+    page = client.get("/lab/info").text
+    manual = page[page.index('<div class="manual">') :]
+    for anchor in re.findall(r'<a href="#([\w-]+)"', manual):
+        assert f'id="{anchor}"' in manual, anchor
+    for href in set(re.findall(r'href="(/[^"#]*)"', manual)):
+        assert client.get(href).status_code == 200, href
+    tabs = re.findall(r'<a href="/lab/(\w+)"', page[: page.index("<main>")])
+    assert set(tabs) == {"models", "chat", "test", "suites", "system", "info"}
+    for tab in set(tabs) - {"info"}:
+        assert f'href="/lab/{tab}">{tab}</a></td>' in manual, tab  # a row in the tabs table
+    for tip in EVALUATOR_GUIDE:
+        assert f"<code>{tip.type}</code>" in manual
+    # every metric the manual names is one llb really produces
+    src = Path(__file__).parents[2] / "src" / "llmbench"
+    code = "\n".join(p.read_text() for p in src.rglob("*.py"))
+    suffixes = r"ms_p50|mean|rate|failed|per_s|aggregate|mb|c"
+    metrics = re.findall(rf"<code>([a-z_]+_(?:{suffixes}))", manual)
+    assert len(metrics) >= 10
+    for metric in metrics:
+        assert metric in code, metric

@@ -1,0 +1,150 @@
+{% extends "lab_base.html.j2" %}
+{% block style %}
+<style>
+  .manual { max-width: 1060px; }
+  .manual p, .manual li { color: var(--fg); }
+  .manual p.lead { color: var(--dim); }
+  .manual ul, .manual ol { padding-left: 20px; display: grid; gap: 4px; }
+  .manual table { margin: 6px 0 10px; }
+  .manual td { white-space: normal; vertical-align: top; }
+  .manual td:first-child { white-space: nowrap; }
+  .manual .recipe { border: 1px solid var(--line); background: var(--panel); padding: 4px 14px 10px; margin: 10px 0; }
+  .manual .recipe h3 { margin-top: 10px; }
+  .manual pre { max-height: none; }
+  .toc { columns: 2; column-gap: 32px; padding-left: 18px; }
+  @media (max-width: 760px) { .toc { columns: 1; } }
+</style>
+{% endblock %}
+{% block content %}
+<h1>info<span class="cursor"></span></h1>
+<div class="manual">
+<p class="lead">The user manual of the lab. <code>llb lab</code> runs the same commands as the <code>llb</code> CLI on the same files, so everything here also works from a terminal, and the other way round.</p>
+
+<nav class="sections"><a href="#tabs">tabs</a><a href="#start">first steps</a><a href="#concepts">concepts</a><a href="#recipes">recipes</a><a href="#numbers">reading the numbers</a><a href="#evaluators">evaluators</a><a href="#rules">rules</a><a href="#problems">problems</a></nav>
+
+<h2 id="tabs">tabs</h2>
+<table>
+  <thead><tr><th>tab</th><th>what you do there</th><th>same as</th></tr></thead>
+  <tbody>
+    <tr><td><a href="/lab/models">models</a></td><td>Search Hugging Face or pull an <code>hf://</code> reference, see each quantization's size and whether it fits in RAM, download, inspect the GGUF, keep a model in <code>models/</code>, delete it, prune the cache.</td><td><code>llb models …</code></td></tr>
+    <tr><td><a href="/lab/chat">chat</a></td><td>Load one model and talk to it. Each answer shows time to first token, tokens/s, memory and temperature.</td><td><code>llama-server</code> by hand</td></tr>
+    <tr><td><a href="/lab/test">test</a></td><td>Write experiments (form or YAML) and run them: validate, plan, run, guide, report, judge.</td><td><code>llb validate/plan/run/guide/report/judge</code></td></tr>
+    <tr><td><a href="/lab/suites">suites</a></td><td>Write the tests: prompts and the checks that score their answers. Preview them and <b>try it</b> on the chat model.</td><td>editing <code>suites/*.yaml</code></td></tr>
+    <tr><td><a href="/lab/system">system</a></td><td>Environment, disk usage, llama.cpp builds (compile one), the flags each binary accepts.</td><td><code>llb doctor</code>, <code>llb llama …</code></td></tr>
+    <tr><td><a href="/">results</a></td><td>The dashboard: every experiment, its charts and runs, and comparisons between experiments.</td><td><code>llb serve</code></td></tr>
+  </tbody>
+</table>
+<p>The cards at the top of every tab show the machine right now: CPU temperature, RAM, clock, governor and (on a Pi) throttling. Below them appears whatever is running: a job with its output and a <b>cancel</b> button, downloads, and the chat model.</p>
+
+<h2 id="start">first steps</h2>
+<ol>
+  <li><b>Compile llama.cpp</b> in <a href="/lab/system">system</a> → <i>build llama.cpp</i>. The chat needs a build; a run compiles the version its profile pins by itself. It takes a few minutes on a PC and longer on a Pi.</li>
+  <li><b>Get a model</b> in <a href="/lab/models">models</a>: search (<code>qwen3 4b</code>) or paste a repo, pick a quantization that <b>fits</b> and press <b>download</b>. <b>Q4_K_M</b> is the usual first choice.</li>
+  <li><b>Chat with it</b>: the <b>chat</b> button in its row loads it. Check that its answers make sense before measuring anything.</li>
+  <li><b>Measure it</b> in <a href="/lab/test">test</a> → <b>new…</b>: tick the model and the tests (speed, latency, Spanish writing), <b>create</b>, then <b>run</b>. The chat is unloaded while it measures.</li>
+  <li><b>Read the results</b> in <a href="/">results</a>, or press <b>guide</b> in the test tab to get the winning configuration and its <code>llama-server</code> command.</li>
+</ol>
+
+<h2 id="concepts">concepts</h2>
+<table>
+  <tbody>
+    <tr><td><b>model, GGUF</b></td><td>llama.cpp runs models in the GGUF format. A Hugging Face repo without <code>.gguf</code> files cannot run as is; most models have a GGUF version (unsloth, bartowski, the model's own org…).</td></tr>
+    <tr><td><b>quantization</b></td><td>How many bits each weight keeps: <code>Q8_0</code> is close to the original and twice the size of <code>Q4_K_M</code>, which is smaller and faster and loses a little quality. <code>IQ</code> and <code>UD-</code> variants squeeze further. Bigger file = more RAM and usually slower generation.</td></tr>
+    <tr><td><b>where models live</b></td><td><b>cache</b> is the Hugging Face cache; <b>★ models/</b> are favorites, never deleted automatically. The <code>pi5</code> profile removes a cached model after its last run (little disk); experiments created in the lab set <code>retention: keep</code>, so they never delete your models.</td></tr>
+    <tr><td><b>build</b></td><td>A compiled llama.cpp, identified by its commit and backend (cpu, cuda, vulkan…). Results record the exact build.</td></tr>
+    <tr><td><b>profile</b></td><td>A file in <code>experiments/_profiles/</code> that an experiment <code>extends</code>: the build and how to treat the hardware. <code>pc</code> pins llama.cpp <code>b11507</code>. <code>pi5</code> builds <code>LLB_LLAMA_REF</code> (default <code>master</code>: pin a tag for repeatable series), waits for the CPU to cool to 60 °C between runs, refuses to start while throttled and needs the <code>performance</code> governor. <code>deterministic</code> sets temperature 0 and a fixed seed, so answers repeat.</td></tr>
+    <tr><td><b>experiment</b></td><td>One YAML in <code>experiments/</code>: models × builds × settings, the phases to measure, and optionally gates. Its <code>experiment.name</code> is the results folder.</td></tr>
+    <tr><td><b>defaults, matrix</b></td><td><b>defaults</b> are the llama.cpp settings every run uses. The <b>matrix</b> lists settings to vary, e.g. <code>load.threads: [2, 4]</code>; axes are crossed (2 × 3 = 6 variants), and <code>zip</code> moves several together.</td></tr>
+    <tr><td><b>configuration, run</b></td><td>A configuration is one build × model × variant. A run is one measurement of one configuration in one phase (and suite).</td></tr>
+    <tr><td><b>phases</b></td><td><b>bench</b>: raw speed with <code>llama-bench</code>, no suite. <b>latency</b>: one request at a time through <code>llama-server</code> (usually synthetic suites). <b>quality</b>: answers scored by the suite's evaluators. <b>serving</b>: several clients at once. <b>lm_eval</b>: standard benchmarks (extra <code>lm-eval</code>). <b>judge</b>: a stronger model rates answers 1–5, stored apart.</td></tr>
+    <tr><td><b>suite, item, evaluator</b></td><td>A suite (<code>suites/*.yaml</code>) is a list of requests; an item is one request; an evaluator is the check that scores its answer from 0 to 1 and decides pass or fail. Suites can also be synthetic (exact token counts), rows of a file, or a Hugging Face dataset.</td></tr>
+    <tr><td><b>gates, select</b></td><td>Gates are pass/fail thresholds on a metric (e.g. <code>tps:tg128 &gt;= 10</code>). <b>select</b> says which metric picks the winner among those that pass. <b>guide</b> applies both.</td></tr>
+    <tr><td><b>fingerprint, resume</b></td><td>Each run has a fingerprint of everything that determines the measurement. <code>--resume</code> skips runs whose fingerprint already completed, so an interrupted experiment continues where it stopped, and changing a setting measures only what it affects.</td></tr>
+  </tbody>
+</table>
+
+<h2 id="recipes">recipes</h2>
+<div class="recipe">
+  <h3>Is this model fast enough to chat with on my machine?</h3>
+  <p>In <a href="/lab/test">test</a> → <b>new…</b>, tick the model and the <b>speed</b> and <b>latency</b> tests, then <b>run</b>. In results look at <b>tg128</b> (tokens/s while writing; roughly 8–10 tokens/s already reads comfortably) and <b>TTFT p95</b> (the wait before the first word, in ms).</p>
+</div>
+<div class="recipe">
+  <h3>Q4_K_M or Q8_0?</h3>
+  <p>Download both quantizations, then <b>new…</b> with both models ticked and the speed and Spanish writing tests. Compare tokens/s, peak memory and score: if the score barely changes, the smaller one wins. The <code>quantization.yaml</code> example compares four.</p>
+</div>
+<div class="recipe">
+  <h3>How many threads?</h3>
+  <p>Open an experiment, and in <b>matrix</b> add the axis <code>load.threads</code> with values like <code>2, 3, 4</code>. Every value becomes a configuration. On a Pi 5 the best value is often below the core count (see <code>pi5-threads.yaml</code>).</p>
+</div>
+<div class="recipe">
+  <h3>Does it write good Spanish? With my own questions?</h3>
+  <ol>
+    <li>In <a href="/lab/suites">suites</a> → <b>new…</b> → <i>Spanish prompts with checks</i>. Replace the example items with yours; the <b>evaluator cheat sheet</b> says which check fits each case.</li>
+    <li>Load a model in the chat and press <b>try it</b>: each answer appears with its score. Adjust the checks until they judge the way you would.</li>
+    <li><b>use in an experiment →</b> opens the test tab with your suite ticked: tick the models, <b>create</b>, <b>run</b>.</li>
+    <li>For grammar or naturalness, which no rule can check, add an <code>llm_judge</code> evaluator and a <b>judge</b> phase, then press <b>judge</b> after the run.</li>
+  </ol>
+</div>
+<div class="recipe">
+  <h3>Deploy the winner</h3>
+  <p>Add gates (e.g. <code>tps:tg128 &gt;= 10</code>) and a <b>select</b> to the experiment, then press <b>guide</b>: it lists which configurations pass, picks the winner and writes its <code>llama-server</code> command and a systemd unit to <code>guidance.md</code>.</p>
+</div>
+<div class="recipe">
+  <h3>Compare the PC with the Pi</h3>
+  <p>Run the same experiment on both machines (with each machine's profile). In <a href="/">results</a>, tick both experiments and press <b>compare</b>: configurations side by side, machine differences highlighted.</p>
+</div>
+
+<h2 id="numbers">reading the numbers</h2>
+<table>
+  <thead><tr><th>metric</th><th>meaning</th></tr></thead>
+  <tbody>
+    <tr><td><code>tps:pp512</code></td><td>Prompt processing: tokens/s reading a 512-token prompt. What you wait for before the first word on long inputs. Higher is better.</td></tr>
+    <tr><td><code>tps:tg128</code></td><td>Text generation: tokens/s writing 128 tokens. The reading speed of the answer. Higher is better.</td></tr>
+    <tr><td>95% CI, cv</td><td>The interval where the true mean most likely lies, and the spread of the repetitions. A run is marked <b>unstable</b> when cv exceeds 5% or the Pi throttled: repeat it.</td></tr>
+    <tr><td><code>ttft_ms_p50 / p95</code></td><td>Time to first token: from sending the request to the first word, typical (p50) and near-worst (p95) case.</td></tr>
+    <tr><td><code>itl_ms_p50 / p95</code></td><td>Inter-token latency: the gap between words while it writes.</td></tr>
+    <tr><td><code>e2e_ms_p50 / p95</code></td><td>The whole request, start to last token.</td></tr>
+    <tr><td><code>gen_tps_mean</code>, <code>prompt_tps_mean</code></td><td>Writing and reading speed measured through llama-server.</td></tr>
+    <tr><td><code>requests_per_s</code>, <code>gen_tps_aggregate</code></td><td>Serving: what several concurrent clients get in total.</td></tr>
+    <tr><td><code>score_mean</code>, <code>pass_rate</code></td><td>Quality: mean evaluator score (0–1) and share of answers that pass.</td></tr>
+    <tr><td><code>requests_failed</code>, <code>error_rate</code></td><td>Requests that errored or timed out.</td></tr>
+    <tr><td><code>peak_rss_mb</code></td><td>Peak memory of the llama.cpp process: weights + KV cache + buffers. It must fit in RAM.</td></tr>
+    <tr><td><code>temp_peak_c</code>, <code>throttled</code></td><td>Hottest CPU temperature during the run, and whether a Pi slowed down because of heat or power.</td></tr>
+  </tbody>
+</table>
+<p>A metric can be restricted to one suite with <code>@suite</code>, e.g. <code>ttft_ms_p95@synthetic-512x128</code>, in gates and selection.</p>
+
+<h2 id="evaluators">evaluators</h2>
+<p>Every check scores an answer from 0 to 1 and decides pass or fail. The <a href="/lab/suites">suites</a> tab has the same list with ready-to-use examples.</p>
+<table>
+  <tbody>
+  {% for t in evaluators %}
+    <tr><td><code>{{ t.type }}</code></td><td>{{ t.use_when }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<h2 id="rules">rules the lab follows</h2>
+<ul>
+  <li><b>One heavy thing at a time.</b> A run, a judge pass or a build first unloads the chat (a loaded model takes RAM and heats the CPU) and waits for downloads. While it runs, the lab refuses to load the chat, download or delete.</li>
+  <li><b>Jobs survive the page and the lab.</b> Closing the browser does nothing to a run, and a restarted lab finds it again. <b>cancel</b> stops it like Ctrl-C: what was measured is kept, and <code>--resume</code> continues.</li>
+  <li><b>Same files as the terminal.</b> The test and suites tabs edit <code>experiments/</code> and <code>suites/</code>; the form keeps the YAML's comments. Edits are saved only when you press <b>save</b> (run, judge and report save first).</li>
+  <li><b>Try it is not a measurement.</b> It sends a few requests to the chat model with the chat's settings and stores nothing. Measurements are experiments.</li>
+  <li><b>Deleting asks first.</b> Deleting from the Hugging Face cache removes the whole revision (the lab lists the other files it holds); <b>prune</b> deletes only what its preview showed.</li>
+</ul>
+
+<h2 id="problems">problems</h2>
+<table>
+  <tbody>
+    <tr><td>The chat says there is no build</td><td>Compile one in <a href="/lab/system">system</a>, or start the lab with <code>--llama-server &lt;path&gt;</code>.</td></tr>
+    <tr><td>A model is "too big" or the chat fails to load it</td><td>It does not fit in RAM: take a smaller quantization, or lower <b>context</b> in the chat (the KV cache grows with it).</td></tr>
+    <tr><td>A Pi run refuses to start</td><td>Set the governor: <code>echo performance | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor</code>. If it says throttled, improve the cooling or the power supply.</td></tr>
+    <tr><td>Runs wait a long time between them</td><td>That is the cooldown: the <code>pi5</code> profile waits for 60 °C. Use an active cooler.</td></tr>
+    <tr><td>A repo is gated or private</td><td>Accept its license on huggingface.co and start the lab with <code>HF_TOKEN</code> set.</td></tr>
+    <tr><td>A repo shows no quantizations</td><td>It has no GGUF files. Search for the model's name plus <code>GGUF</code>.</td></tr>
+    <tr><td>Results marked <b>unstable</b></td><td>The repetitions varied more than 5% or the CPU throttled. Close other programs and run again (<code>--resume</code> keeps the rest).</td></tr>
+    <tr><td>Something else</td><td>The job's <b>output</b> panel shows the command's full log; validate and plan show <code>llb</code>'s own messages.</td></tr>
+  </tbody>
+</table>
+</div>
+{% endblock %}

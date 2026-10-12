@@ -37,6 +37,7 @@
 {% endblock %}
 {% block content %}
 <h1>test<span class="cursor"></span></h1>
+{% with here = "test" %}{% include "_guide.html.j2" %}{% endwith %}
 <p class="help">An experiment editor with the same YAML and commands as the terminal. Files live in <code id="folder"></code>, next to the examples, so <code>llb run</code> works on them by hand too. Edit with the form or in the YAML on the right: both stay in sync, and the form keeps the YAML's comments.</p>
 
 <div class="panel">
@@ -61,6 +62,8 @@
     <div class="checks" id="new-models"></div>
     <p class="hint" style="margin:8px 0 2px">start with these tests</p>
     <div class="checks" id="new-presets"></div>
+    <p class="hint" style="margin:8px 0 2px">and these suites (a synthetic one goes to latency, any other to quality)</p>
+    <div class="checks" id="new-suites"></div>
     <div style="margin-top:10px"><button class="btn" id="new-create">create</button></div>
   </div>
 </div>

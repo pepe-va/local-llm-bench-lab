@@ -375,9 +375,15 @@ def new_experiment(
     root: Path,
     profile: str | None,
     presets: list[str],
+    suites: list[str] | None = None,
     name: str | None = None,
 ) -> dict[str, Any]:
-    """A starting point: the chosen models, this machine's profile and test presets."""
+    """A starting point: the chosen models, this machine's profile, test presets and suites.
+
+    `suites` are paths relative to `folder` (as `Experiments.suites()` lists them). A
+    synthetic suite goes to the latency phase (it times requests); any other to quality
+    (it scores answers).
+    """
     from llmbench.lab.experiment import PRESETS, experiment_name  # noqa: PLC0415
 
     chosen = [p for p in PRESETS if p.key in presets]
@@ -400,10 +406,23 @@ def new_experiment(
         if p.phase == "bench":
             phases["bench"] = {"n_prompt": [512], "n_gen": [128], "repetitions": 3}
         else:
-            suites = [os.path.relpath(root / "suites" / s, folder) for s in p.suites]
-            phases[p.phase] = {"enabled": True, "suites": suites}
+            paths = [os.path.relpath(root / "suites" / s, folder) for s in p.suites]
+            phases[p.phase] = {"enabled": True, "suites": paths}
+    for rel in suites or []:
+        phase = _phase_for(folder / rel)
+        entry = phases.setdefault(phase, {"enabled": True, "suites": []})
+        if rel not in entry["suites"]:
+            entry["suites"].append(rel)
     doc["phases"] = phases
     return doc
+
+
+def _phase_for(suite: Path) -> str:
+    try:
+        source: object = parse(suite.read_text()).get("source")
+    except (OSError, EditorError) as e:
+        raise EditorError(f"cannot read suite {suite.name}: {e}") from None
+    return "latency" if isinstance(source, dict) and "synthetic" in source else "quality"
 
 
 def dump(doc: dict[str, Any]) -> str:
