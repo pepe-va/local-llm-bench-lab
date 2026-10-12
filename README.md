@@ -131,6 +131,10 @@ uv run llb serve                                      # dashboard on http://127.
 
 Reports, CSVs and the SQLite database are in `~/.local/share/llmbench/runs/pc-smoke/`.
 
+![The dashboard's llama-bench chart: Qwen3-0.6B Q4_K_M vs Q8_0 at 4 and 8 threads, with 95% confidence intervals](assets/screenshots/results-charts.png)
+
+*The dashboard comparing Qwen3-0.6B Q4_K_M and Q8_0 at 4 and 8 threads (AMD Ryzen 7 7735HS). Q4_K_M with 8 threads wins: 338 tokens/s reading the prompt, 80 tokens/s writing.*
+
 ### On a Raspberry Pi 5
 
 The Pi experiments require the `performance` CPU governor. They refuse to start while the Pi is throttling, and they wait for it to cool down to 60 °C between runs, so use an active cooler.
@@ -159,6 +163,26 @@ The experiments and suites are the files in `experiments/` and `suites/`, so the
 ```bash
 uv run llb lab                                        # http://127.0.0.1:8765/lab, from the repository root
 ```
+
+**models**: open any Hugging Face repo and see each quantization's size and whether it fits in RAM, next to the models already on this machine.
+
+![The models tab: the quantizations of Qwen/Qwen3-8B-GGUF and the models on disk](assets/screenshots/lab-models.png)
+
+**chat**: every answer shows time to first token, tokens/s and memory; a thinking model's reasoning is folded apart from the answer.
+
+![The chat tab: Qwen3-0.6B answering in Spanish with its metrics](assets/screenshots/lab-chat.png)
+
+**test**: the experiment editor. The form is generated from the YAML schema and each llama.cpp setting names the flag it becomes; the YAML on the right follows every change, comments included. The buttons on top are the CLI's commands.
+
+![The test tab: an experiment in the form and in YAML, with the validate, plan, run, guide, report and judge buttons](assets/screenshots/lab-test.png)
+
+**suites**: write a test suite and **try it** on the chat model before measuring: each answer is scored by the suite's checks.
+
+![The suites tab: trying es-writing.yaml on Qwen3-0.6B, with each answer's score](assets/screenshots/lab-suites.png)
+
+**system**: compile llama.cpp with every option, and see the flags each binary accepts.
+
+![The system tab: the llama.cpp build form with its equivalent command](assets/screenshots/lab-system.png)
 
 The lab loads one model at a time. A run, a judge pass or a llama.cpp build unloads the chat first, and no chat, download or deletion starts while it runs. Only repos with GGUF files run on llama.cpp; most models have a GGUF version (unsloth, bartowski, the model's own org…).
 
