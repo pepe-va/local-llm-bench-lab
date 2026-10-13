@@ -20,7 +20,7 @@
 <div class="manual">
 <p class="lead">The user manual of the lab. <code>llb lab</code> runs the same commands as the <code>llb</code> CLI on the same files, so everything here also works from a terminal, and the other way round.</p>
 
-<nav class="sections"><a href="#tabs">tabs</a><a href="#start">first steps</a><a href="#concepts">concepts</a><a href="#recipes">recipes</a><a href="#numbers">reading the numbers</a><a href="#evaluators">evaluators</a><a href="#rules">rules</a><a href="#problems">problems</a></nav>
+<nav class="sections"><a href="#tabs">tabs</a><a href="#start">first steps</a><a href="#concepts">concepts</a><a href="#recipes">recipes</a><a href="#phases">what it measures</a><a href="#writing">writing an experiment</a><a href="#examples">examples</a><a href="#commands">commands</a><a href="#files">results and resuming</a><a href="#models">models and disk</a><a href="#numbers">reading the numbers</a><a href="#evaluators">evaluators</a><a href="#config">configuration</a><a href="#remote">remote access</a><a href="#rules">rules</a><a href="#limits">limitations</a><a href="#problems">problems</a></nav>
 
 <h2 id="tabs">tabs</h2>
 <table>
@@ -28,7 +28,7 @@
   <tbody>
     <tr><td><a href="/lab/models">models</a></td><td>Search Hugging Face or pull an <code>hf://</code> reference, see each quantization's size and whether it fits in RAM, download, inspect the GGUF, keep a model in <code>models/</code>, delete it, prune the cache.</td><td><code>llb models …</code></td></tr>
     <tr><td><a href="/lab/chat">chat</a></td><td>Load one model and talk to it. Each answer shows time to first token, tokens/s, memory and temperature.</td><td><code>llama-server</code> by hand</td></tr>
-    <tr><td><a href="/lab/test">test</a></td><td>Write experiments (form or YAML) and run them: validate, plan, run, guide, report, judge.</td><td><code>llb validate/plan/run/guide/report/judge</code></td></tr>
+    <tr><td><a href="/lab/test">test</a></td><td>Pick an experiment from the list (description, models, phases, whether it has results) or create one step by step, edit it (form or YAML) and run it: validate, plan, run, guide, report, judge.</td><td><code>llb validate/plan/run/guide/report/judge</code></td></tr>
     <tr><td><a href="/lab/suites">suites</a></td><td>Write the tests: prompts and the checks that score their answers. Preview them and <b>try it</b> on the chat model.</td><td>editing <code>suites/*.yaml</code></td></tr>
     <tr><td><a href="/lab/system">system</a></td><td>Environment, disk usage, llama.cpp builds (compile one), the flags each binary accepts.</td><td><code>llb doctor</code>, <code>llb llama …</code></td></tr>
     <tr><td><a href="/">results</a></td><td>The dashboard: every experiment, its charts and runs, and comparisons between experiments.</td><td><code>llb serve</code></td></tr>
@@ -41,7 +41,7 @@
   <li><b>Compile llama.cpp</b> in <a href="/lab/system">system</a> → <i>build llama.cpp</i>. The chat needs a build; a run compiles the version its profile pins by itself. It takes a few minutes on a PC and longer on a Pi.</li>
   <li><b>Get a model</b> in <a href="/lab/models">models</a>: search (<code>qwen3 4b</code>) or paste a repo, pick a quantization that <b>fits</b> and press <b>download</b>. <b>Q4_K_M</b> is the usual first choice.</li>
   <li><b>Chat with it</b>: the <b>chat</b> button in its row loads it. Check that its answers make sense before measuring anything.</li>
-  <li><b>Measure it</b> in <a href="/lab/test">test</a> → <b>new…</b>: tick the model and the tests (speed, latency, Spanish writing), <b>create</b>, then <b>run</b>. The chat is unloaded while it measures.</li>
+  <li><b>Measure it</b> in <a href="/lab/test">test</a> → <b>new experiment</b>: give it a name, tick the model and the tests (speed, latency, Spanish writing), <b>create and open</b>, then <b>run</b>. The chat is unloaded while it measures.</li>
   <li><b>Read the results</b> in <a href="/">results</a>, or press <b>guide</b> in the test tab to get the winning configuration and its <code>llama-server</code> command.</li>
 </ol>
 
@@ -66,11 +66,11 @@
 <h2 id="recipes">recipes</h2>
 <div class="recipe">
   <h3>Is this model fast enough to chat with on my machine?</h3>
-  <p>In <a href="/lab/test">test</a> → <b>new…</b>, tick the model and the <b>speed</b> and <b>latency</b> tests, then <b>run</b>. In results look at <b>tg128</b> (tokens/s while writing; roughly 8–10 tokens/s already reads comfortably) and <b>TTFT p95</b> (the wait before the first word, in ms).</p>
+  <p>In <a href="/lab/test">test</a> → <b>new experiment</b>, tick the model and the <b>speed</b> and <b>latency</b> tests, then <b>run</b>. In results look at <b>tg128</b> (tokens/s while writing; roughly 8–10 tokens/s already reads comfortably) and <b>TTFT p95</b> (the wait before the first word, in ms).</p>
 </div>
 <div class="recipe">
   <h3>Q4_K_M or Q8_0?</h3>
-  <p>Download both quantizations, then <b>new…</b> with both models ticked and the speed and Spanish writing tests. Compare tokens/s, peak memory and score: if the score barely changes, the smaller one wins. The <code>quantization.yaml</code> example compares four.</p>
+  <p>Download both quantizations, then a <b>new experiment</b> with both models ticked and the speed and Spanish writing tests. Compare tokens/s, peak memory and score: if the score barely changes, the smaller one wins. The <code>quantization.yaml</code> example compares four.</p>
 </div>
 <div class="recipe">
   <h3>How many threads?</h3>
@@ -81,7 +81,7 @@
   <ol>
     <li>In <a href="/lab/suites">suites</a> → <b>new…</b> → <i>Spanish prompts with checks</i>. Replace the example items with yours; the <b>evaluator cheat sheet</b> says which check fits each case.</li>
     <li>Load a model in the chat and press <b>try it</b>: each answer appears with its score. Adjust the checks until they judge the way you would.</li>
-    <li><b>use in an experiment →</b> opens the test tab with your suite ticked: tick the models, <b>create</b>, <b>run</b>.</li>
+    <li><b>use in an experiment →</b> opens the test tab with your suite ticked: name it, tick the models, <b>create and open</b>, <b>run</b>.</li>
     <li>For grammar or naturalness, which no rule can check, add an <code>llm_judge</code> evaluator and a <b>judge</b> phase, then press <b>judge</b> after the run.</li>
   </ol>
 </div>
@@ -93,6 +93,118 @@
   <h3>Compare the PC with the Pi</h3>
   <p>Run the same experiment on both machines (with each machine's profile). In <a href="/">results</a>, tick both experiments and press <b>compare</b>: configurations side by side, machine differences highlighted.</p>
 </div>
+
+<h2 id="phases">what it measures</h2>
+<p>An experiment enables one or more phases:</p>
+<table>
+  <thead><tr><th>phase</th><th>runs on</th><th>measures</th></tr></thead>
+  <tbody>
+    <tr><td><code>bench</code></td><td><code>llama-bench</code></td><td>Prompt and generation tokens/s per test (<code>pp512</code>, <code>tg128</code>…), with median, IQR, CV and a 95% CI. On unless <code>enabled: false</code>.</td></tr>
+    <tr><td><code>latency</code></td><td><code>llama-server</code></td><td>Time to first token, inter-token latency, end-to-end latency, one request at a time.</td></tr>
+    <tr><td><code>quality</code></td><td><code>llama-server</code></td><td>A score per answer from deterministic evaluators (exact, contains, regex, numeric, length, JSON schema…). It also covers embeddings, reranking and vision.</td></tr>
+    <tr><td><code>serving</code></td><td><code>llama-server</code></td><td>Concurrent clients: requests/s, aggregate tokens/s, p95 latencies, errors.</td></tr>
+    <tr><td><code>lm_eval</code></td><td>lm-evaluation-harness</td><td>Standard benchmarks such as GSM8K (extra <code>lm-eval</code>).</td></tr>
+    <tr><td><code>judge</code></td><td><code>llama-server</code></td><td>A stronger LLM scores answers from 1 to 5, stored apart from the objective scores.</td></tr>
+  </tbody>
+</table>
+<p>During every run llb also records CPU temperature, frequency, RAM, the peak memory of the llama.cpp process and, on a Pi, throttling.</p>
+
+<h2 id="writing">writing an experiment</h2>
+<p>The test tab's form writes this YAML for you; this is what a hand-written one looks like:</p>
+<pre data-example="experiment">version: 1
+extends: [_profiles/pc.yaml]                # build + hardware settings (or _profiles/pi5.yaml)
+
+experiment:
+  name: laptop-threads                      # also the results folder name
+
+models:
+  - { id: qwen3-1.7b, source: "hf://unsloth/Qwen3-1.7B-GGUF:Q4_K_M" }
+
+defaults:                                   # llama.cpp settings shared by every run
+  load: { ctx_size: 4096, batch_size: 512, flash_attn: auto }
+
+matrix:                                     # what varies: axes are crossed
+  load.threads: [2, 4, 6, 8]
+  zip:                                      # these move together: f16/f16, then q8_0/q8_0
+    - kv.cache_type_k: [f16, q8_0]
+      kv.cache_type_v: [f16, q8_0]
+
+phases:
+  bench: { n_prompt: [512], n_gen: [128], repetitions: 5 }
+  latency: { enabled: true, suites: [../suites/synthetic-512x128.yaml] }
+
+gates:                                      # pass/fail per configuration
+  - { metric: "tps:tg128", op: "&gt;=", value: 10 }
+  - { metric: "ttft_ms_p95@synthetic-512x128", op: "&lt;=", value: 2000, agg: max }
+select: { metric: "tps:tg128", objective: maximize }</pre>
+<p>Press <b>validate</b> (or run <code>llb validate &lt;yaml&gt;</code>) after each change: it points at the exact field that is wrong.</p>
+<ul>
+  <li><b>Settings</b>: the groups under <code>defaults</code> mirror llama.cpp's options: <code>load</code>, <code>kv</code>, <code>gpu</code>, <code>rope</code>, <code>speculative</code>, <code>server</code>, <code>sampling</code>. Raw flags go in <code>extra_args</code> and environment variables in <code>env</code>. A field a tool doesn't support is reported as <code>ignored</code> (for example, <code>llama-bench</code> has no <code>ctx_size</code>).</li>
+  <li><b>Reasoning</b>: <code>defaults.server.reasoning</code> (<code>on</code>, <code>off</code> or <code>auto</code>), <code>reasoning_budget</code> and <code>reasoning_format</code> control thinking in models such as Qwen3, and <code>chat_template_kwargs</code> passes options like <code>{ enable_thinking: false }</code> to the template. Thinking tokens count towards a suite's <code>max_tokens</code> and delay the visible answer, so they change both latency and quality. The reasoning text is stored apart from the answer.</li>
+  <li><b>Matrix</b>: <code>exclude</code> removes combinations and <code>include</code> adds them. Every model and build is crossed with every variant.</li>
+  <li><b>Models</b>: <code>source</code> is <code>hf://org/repo:QUANT</code> (optionally pinned with <code>@&lt;commit&gt;</code> after the repo), <code>hf://org/repo/path/file.gguf</code> or a local <code>.gguf</code>. <code>retention: keep</code> or <code>delete_after_run</code> overrides the machine's <code>hardware.model_retention</code>. For gated repos, set <code>HF_TOKEN</code>.</li>
+  <li><b>Builds</b>: <code>llama_cpp.builds</code> takes either <code>{ id, ref, backend }</code>, which llb compiles and caches (<code>cpu</code>, <code>cuda</code>, <code>vulkan</code>, <code>metal</code>, <code>blas</code>), or <code>{ id, bin_dir }</code> to use binaries you already have. With several builds you can compare llama.cpp versions.</li>
+  <li><b>Suites</b>: the requests for the server phases live in <code>suites/</code>: synthetic prompts with exact token counts, Spanish writing tasks, GSM8K from Hugging Face, embeddings, reranking and vision. A suite can also read jsonl/csv/parquet files or a Hugging Face dataset.</li>
+  <li><b>Gate metrics</b>: <code>tps:&lt;test&gt;</code> and <code>tps_ci_low:&lt;test&gt;</code>; any server metric (<code>ttft_ms_p95</code>, <code>gen_tps_mean</code>, <code>score_mean</code>, <code>error_rate</code>…), optionally restricted to one suite with <code>@&lt;suite&gt;</code>; <code>peak_rss_mb</code>, <code>temp_peak_c</code> and <code>throttled</code>.</li>
+  <li><b>Variables</b>: <code>${env:VAR:-default}</code> reads an environment variable. The profiles use it for <code>LLB_LLAMA_REF</code>, the llama.cpp version.</li>
+</ul>
+
+<h2 id="examples">example experiments</h2>
+<table>
+  <thead><tr><th>file</th><th>question</th></tr></thead>
+  <tbody>
+    <tr><td><a href="/lab/test?file=pc-smoke.yaml">pc-smoke.yaml</a></td><td>Does everything work? (PC, all phases, a few minutes)</td></tr>
+    <tr><td><a href="/lab/test?file=pi5-threads.yaml">pi5-threads.yaml</a></td><td>How many threads give the best throughput?</td></tr>
+    <tr><td><a href="/lab/test?file=quantization.yaml">quantization.yaml</a></td><td>Q8_0 vs Q6_K vs Q5_K_M vs Q4_K_M: speed and memory</td></tr>
+    <tr><td><a href="/lab/test?file=kv-cache.yaml">kv-cache.yaml</a></td><td>What does quantizing the KV cache cost or save?</td></tr>
+    <tr><td><a href="/lab/test?file=pi5-latency.yaml">pi5-latency.yaml</a></td><td>Is it fast enough for an interactive assistant?</td></tr>
+    <tr><td><a href="/lab/test?file=serving.yaml">serving.yaml</a></td><td>What happens with 1, 2, 4 and 8 concurrent users?</td></tr>
+    <tr><td><a href="/lab/test?file=quality-es.yaml">quality-es.yaml</a></td><td>Which model writes Spanish best? (with an LLM judge)</td></tr>
+    <tr><td><a href="/lab/test?file=modalities.yaml">modalities.yaml</a></td><td>Embeddings, reranking and vision models</td></tr>
+  </tbody>
+</table>
+
+<h2 id="commands">commands</h2>
+<p>Every button in the lab runs one of these; from a terminal, run them as <code>uv run llb …</code> from the repository root. Every command has <code>--help</code>.</p>
+<table>
+  <tbody>
+    <tr><td><code>llb validate &lt;yaml&gt;</code></td><td>Checks the schema, the suites, the models and the flags against each build.</td></tr>
+    <tr><td><code>llb plan &lt;yaml&gt;</code></td><td>Shows what <code>run</code> would execute.</td></tr>
+    <tr><td><code>llb run &lt;yaml&gt; [--resume] [-m &lt;model&gt;] [-y]</code></td><td>Runs the experiment. Exits with 1 if a run failed and 130 if interrupted.</td></tr>
+    <tr><td><code>llb report &lt;yaml&gt; [-f html -f md -f png]</code></td><td>Builds reports from stored results.</td></tr>
+    <tr><td><code>llb guide &lt;yaml&gt;</code></td><td>Applies the gates, picks the winner and writes <code>guidance.md</code>. Exits with 1 if nothing passes.</td></tr>
+    <tr><td><code>llb judge &lt;yaml&gt;</code></td><td>Runs the LLM judge over pending answers.</td></tr>
+    <tr><td><code>llb serve</code></td><td>The read-only results dashboard on its own.</td></tr>
+    <tr><td><code>llb lab [--llama-server &lt;bin&gt;] [--experiments &lt;dir&gt;]</code></td><td>This lab.</td></tr>
+    <tr><td><code>llb llama build --ref &lt;tag&gt; [--backend cuda]</code>, <code>llama ls</code></td><td>Compiles llama.cpp and lists the builds.</td></tr>
+    <tr><td><code>llb models pull|ls|inspect|favorite|unfavorite|prune</code></td><td>Manages GGUF models.</td></tr>
+    <tr><td><code>llb doctor</code></td><td>Shows the environment.</td></tr>
+  </tbody>
+</table>
+
+<h2 id="files">results and resuming</h2>
+<p>Each experiment writes to <code>$LLB_HOME/runs/&lt;name&gt;/</code>, or to <code>output.directory</code> if you set it:</p>
+<table>
+  <tbody>
+    <tr><td><code>benchmark.sqlite</code></td><td>All results, with their provenance (llama.cpp commit, model sha256, flags, machine).</td></tr>
+    <tr><td><code>summary.csv</code></td><td>llama-bench results.</td></tr>
+    <tr><td><code>latency.csv</code>, <code>quality.csv</code>, <code>serving.csv</code></td><td>Server-phase results.</td></tr>
+    <tr><td><code>runs.jsonl</code></td><td>Every run with its full configuration and requests.</td></tr>
+    <tr><td><code>report.*</code></td><td>Reports.</td></tr>
+    <tr><td><code>guidance.md</code></td><td>Gates, winner and deploy command.</td></tr>
+  </tbody>
+</table>
+<p>A failed run never stops the experiment: its error is stored and the rest continue. <code>--resume</code> skips every run whose fingerprint already completed.</p>
+
+<h2 id="models">models and disk space</h2>
+<ul>
+  <li>Downloaded models live in the Hugging Face cache (<code>HF_HOME</code>). Favorites live in <code>models/</code> as real files that are never deleted automatically; you can drop your own <code>.gguf</code> files there too.</li>
+  <li>A model is looked up in <code>models/</code> first, then in the cache, and is downloaded only if it is in neither.</li>
+  <li><code>hardware.model_retention</code> says whether downloaded models stay in the cache. The <code>pc</code> profile keeps them; <code>pi5</code> uses <code>delete_after_run</code>, so a Pi holds about one model at a time.</li>
+  <li><b>inspect</b> (or <code>llb models inspect</code>) reads the GGUF header of a model already on disk: architecture, size, quantization, parameters, context length, layers, heads and, for mixture-of-experts models, the expert counts. In the raw keys you can tell <b>reasoning</b> (<code>tokenizer.chat_template</code> mentions <code>&lt;think&gt;</code> or <code>enable_thinking</code>), <b>base or chat</b> (a base model usually has no chat template), <b>embeddings or reranking</b> (<code>&lt;architecture&gt;.pooling_type</code> is set); <b>vision</b> needs a separate <code>mmproj-*.gguf</code> from the repo.</li>
+</ul>
+<pre>llb models pull hf://unsloth/Qwen3-1.7B-GGUF:Q4_K_M --favorite
+llb models prune --older-than 30 --dry-run          # free cache space</pre>
 
 <h2 id="numbers">reading the numbers</h2>
 <table>
@@ -124,6 +236,34 @@
   </tbody>
 </table>
 
+<h2 id="config">configuration</h2>
+<table>
+  <thead><tr><th>variable</th><th>default</th><th>purpose</th></tr></thead>
+  <tbody>
+    <tr><td><code>LLB_HOME</code></td><td><code>~/.local/share/llmbench</code></td><td>Builds, llama.cpp source, lab state and results.</td></tr>
+    <tr><td><code>LLB_MODELS_DIR</code></td><td><code>./models</code></td><td>Favorites folder.</td></tr>
+    <tr><td><code>LLB_LLAMA_REF</code></td><td>set by each profile</td><td>llama.cpp version used by the profiles.</td></tr>
+    <tr><td><code>HF_HOME</code>, <code>HF_TOKEN</code></td><td>Hugging Face defaults</td><td>Model cache and access to gated repos.</td></tr>
+  </tbody>
+</table>
+<p>Optional extras for <code>uv sync</code>: <code>report</code> (HTML and PNG reports), <code>serve</code> (the dashboard and this lab), <code>hf-datasets</code> (suites from Hugging Face datasets or parquet files), <code>lm-eval</code> (the <code>lm_eval</code> phase). <code>uv sync</code> removes any extra you don't list, so repeat all of them every time. The <a href="/lab/system">system</a> tab shows which ones are installed.</p>
+
+<h2 id="remote">remote access</h2>
+<p>The lab listens on 127.0.0.1 only, because it has no authentication and can download and run things. To reach it from your other devices, use an SSH tunnel or Tailscale, which adds HTTPS and lets in only your own devices:</p>
+<pre>sudo tailscale serve --bg --https=443 http://127.0.0.1:8765   # https://&lt;machine&gt;.&lt;tailnet&gt;.ts.net/lab</pre>
+<p>To keep it running on a Pi, a systemd user service is enough (<code>sudo loginctl enable-linger $USER</code> once, so it keeps running after you log out):</p>
+<pre># ~/.config/systemd/user/llb-lab.service, then: systemctl --user enable --now llb-lab
+[Unit]
+Description=llb lab
+
+[Service]
+WorkingDirectory=%h/local-llm-bench-lab
+ExecStart=%h/.local/bin/uv run --no-sync llb lab
+Restart=on-failure
+
+[Install]
+WantedBy=default.target</pre>
+
 <h2 id="rules">rules the lab follows</h2>
 <ul>
   <li><b>One heavy thing at a time.</b> A run, a judge pass or a build first unloads the chat (a loaded model takes RAM and heats the CPU) and waits for downloads. While it runs, the lab refuses to load the chat, download or delete.</li>
@@ -131,6 +271,13 @@
   <li><b>Same files as the terminal.</b> The test and suites tabs edit <code>experiments/</code> and <code>suites/</code>; the form keeps the YAML's comments. Edits are saved only when you press <b>save</b> (run, judge and report save first).</li>
   <li><b>Try it is not a measurement.</b> It sends a few requests to the chat model with the chat's settings and stores nothing. Measurements are experiments.</li>
   <li><b>Deleting asks first.</b> Deleting from the Hugging Face cache removes the whole revision (the lab lists the other files it holds); <b>prune</b> deletes only what its preview showed.</li>
+</ul>
+
+<h2 id="limits">limitations</h2>
+<ul>
+  <li><b>GPU</b>: llb builds llama.cpp with CUDA, Vulkan or Metal and passes every offloading flag, but it doesn't read GPU telemetry (VRAM, utilization, temperature, power). GPU builds are not tested on real hardware yet.</li>
+  <li><b>Memory</b>: a run does not check in advance whether a model fits in RAM (the models tab does, before downloading). A run killed for lack of memory is recorded as failed, and the experiment continues.</li>
+  <li><b>Scope</b>: llama.cpp on Linux only. macOS is untested, and there is no Ollama, vLLM, cloud APIs or energy measurement.</li>
 </ul>
 
 <h2 id="problems">problems</h2>

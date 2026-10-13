@@ -405,6 +405,22 @@ def test_new_experiment_puts_each_suite_in_its_phase(
     assert bad.status_code == 400
 
 
+def test_the_manuals_experiment_example_is_valid(client: TestClient, tmp_path: Path) -> None:
+    import html  # noqa: PLC0415
+    import re  # noqa: PLC0415
+
+    page = client.get("/lab/info").text
+    [block] = re.findall(r'<pre data-example="experiment">(.*?)</pre>', page, re.S)
+    (tmp_path / "experiments").mkdir()
+    (tmp_path / "experiments" / "_profiles").symlink_to(REPO / "experiments" / "_profiles")
+    (tmp_path / "suites").symlink_to(REPO / "suites")
+    exp = tmp_path / "experiments" / "example.yaml"
+    exp.write_text(html.unescape(block))
+    loaded = load_experiment(exp)
+    assert loaded.matrix.zip
+    assert len(loaded.gates) == 2
+
+
 def test_the_manual_covers_every_tab_and_its_links_work(client: TestClient) -> None:
     import re  # noqa: PLC0415
 

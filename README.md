@@ -19,27 +19,6 @@ It was designed for a Raspberry Pi 5 first, and it works on any Linux PC, includ
 
 > Status: **v0.11.0**: every planned phase is implemented, including per-test confidence intervals and a check that serving requests fit each llama-server slot. 1.0.0 will follow validation on a Raspberry Pi 5. See [CHANGELOG](CHANGELOG.md).
 
-## Contents
-
-- [How it works](#how-it-works)
-- [Quick start](#quick-start)
-  - [1. Install](#1-install)
-  - [2. Run your first experiment](#2-run-your-first-experiment)
-  - [3. Look at the results](#3-look-at-the-results)
-  - [On a Raspberry Pi 5](#on-a-raspberry-pi-5)
-  - [The lab: try any model from the browser](#the-lab-try-any-model-from-the-browser)
-- [Going further](#going-further)
-  - [What it measures](#what-it-measures)
-  - [Example experiments](#example-experiments)
-  - [Writing your own experiment](#writing-your-own-experiment)
-  - [Commands](#commands)
-  - [Results and resuming](#results-and-resuming)
-  - [Models and disk space](#models-and-disk-space)
-  - [Configuration](#configuration)
-  - [Limitations](#limitations)
-- [Development](#development)
-- [License](#license)
-
 ## How it works
 
 ```mermaid
@@ -129,7 +108,7 @@ uv run llb guide experiments/pc-smoke.yaml            # gates → winner → lla
 uv run llb serve                                      # dashboard on http://127.0.0.1:8765
 ```
 
-Reports, CSVs and the SQLite database are in `~/.local/share/llmbench/runs/pc-smoke/`.
+Reports, CSVs and the SQLite database are in `$LLB_HOME/runs/pc-smoke/` (`LLB_HOME` defaults to `~/.local/share/llmbench`).
 
 ![The dashboard's llama-bench chart: Qwen3-0.6B Q4_K_M vs Q8_0 at 4 and 8 threads, with 95% confidence intervals](assets/screenshots/results-charts.png)
 
@@ -145,228 +124,42 @@ uv run llb run experiments/pi5-threads.yaml           # best thread count
 uv run llb run experiments/pi5-latency.yaml           # time to first token and generation speed
 ```
 
-### The lab: try any model from the browser
-
-`llb lab` does from the browser almost everything the CLI does. Each tab covers a group of commands:
-
-| Tab | What you do there | CLI equivalent |
-|---|---|---|
-| **models** | Search Hugging Face by name or paste a repo (or pull an `hf://` reference), see every quantization with its size and whether it fits in RAM, download it, inspect its GGUF metadata, keep it in `models/`, delete it, or prune the cache | `llb models pull/ls/inspect/favorite/unfavorite/prune` |
-| **chat** | Talk to any downloaded model. Every answer shows time to first token, tokens/s, memory and CPU temperature, with the reasoning of thinking models apart | `llama-server` by hand |
-| **test** | Edit experiments with a form generated from the YAML schema (every field, with the llama.cpp flag it becomes) or in the YAML itself; both stay in sync and comments survive. Then validate, plan, run (`--resume`, `-m`, `--no-build`), guide, report and judge | `llb validate/plan/run/guide/report/judge` |
-| **suites** | Write the tests themselves: prompts with their checks (exact, contains, regex, JSON schema, all/any/weighted…), synthetic prompts, files or Hugging Face datasets. Preview the requests a run would send, and **try it** against the chat model to see each answer scored | editing `suites/*.yaml` by hand |
-| **system** | Environment, extras, disk usage, llama.cpp builds, compile one with every option, and the flags each binary accepts | `llb doctor`, `llb llama ls/build/flags` |
-| **info** | The user manual: first steps, concepts, recipes (Q4 or Q8? how many threads? my own Spanish questions), what each metric means, and fixes for common problems | this README |
-| **results** | The dashboard: compare experiments, charts, runs | `llb serve` |
-
-The experiments and suites are the files in `experiments/` and `suites/`, so the lab and the terminal work on the same YAML. Results land in the **results** tab.
+## The lab
 
 ```bash
 uv run llb lab                                        # http://127.0.0.1:8765/lab, from the repository root
 ```
 
-**models**: open any Hugging Face repo and see each quantization's size and whether it fits in RAM, next to the models already on this machine.
+`llb lab` does from the browser almost everything the CLI does, on the same files in `experiments/` and `suites/`:
 
-![The models tab: the quantizations of Qwen/Qwen3-8B-GGUF and the models on disk](assets/screenshots/lab-models.png)
+| Tab | What you do there |
+|---|---|
+| **models** | Search Hugging Face, see each quantization's size and whether it fits in RAM, download, inspect, keep favorites |
+| **chat** | Talk to a downloaded model, with time to first token, tokens/s, memory and temperature |
+| **test** | Pick or create experiments, edit them (form or YAML) and validate, plan, run, guide, report, judge |
+| **suites** | Write the tests (prompts and the checks that score answers) and **try it** on the chat model |
+| **system** | Environment, disk usage, llama.cpp builds and the flags each binary accepts |
+| **info** | **The full manual**: concepts, recipes, phases, writing an experiment, every command, result files, models and disk, metrics, configuration, remote access, limitations, problems |
+| **results** | The dashboard (`llb serve`) |
 
-**chat**: every answer shows time to first token, tokens/s and memory; a thinking model's reasoning is folded apart from the answer.
-
-![The chat tab: Qwen3-0.6B answering in Spanish with its metrics](assets/screenshots/lab-chat.png)
-
-**test**: the experiment editor. The form is generated from the YAML schema and each llama.cpp setting names the flag it becomes; the YAML on the right follows every change, comments included. The buttons on top are the CLI's commands.
+![The test tab: the list of experiments next to the step-by-step new experiment](assets/screenshots/lab-test-list.png)
 
 ![The test tab: an experiment in the form and in YAML, with the validate, plan, run, guide, report and judge buttons](assets/screenshots/lab-test.png)
 
-**suites**: write a test suite and **try it** on the chat model before measuring: each answer is scored by the suite's checks. New suites start from templates (one in Spanish), an evaluator cheat sheet says which check fits each case and drops its example into the open item, and **use in an experiment** opens the test tab with the suite already in place. A short guide on both tabs explains how suites, experiments and results fit together.
+<details>
+<summary>More screenshots: models, chat, suites, system</summary>
+
+![The models tab: the quantizations of Qwen/Qwen3-8B-GGUF and the models on disk](assets/screenshots/lab-models.png)
+
+![The chat tab: Qwen3-0.6B answering in Spanish with its metrics](assets/screenshots/lab-chat.png)
 
 ![The suites tab: trying es-writing.yaml on Qwen3-0.6B, with each answer's score](assets/screenshots/lab-suites.png)
 
-**system**: compile llama.cpp with every option, and see the flags each binary accepts.
-
 ![The system tab: the llama.cpp build form with its equivalent command](assets/screenshots/lab-system.png)
 
-The lab loads one model at a time. A run, a judge pass or a llama.cpp build unloads the chat first, and no chat, download or deletion starts while it runs. Only repos with GGUF files run on llama.cpp; most models have a GGUF version (unsloth, bartowski, the model's own org…).
+</details>
 
-The lab listens on 127.0.0.1 only, because it has no authentication and can download and run things. To reach it from your other devices, use an SSH tunnel or [Tailscale](https://tailscale.com/kb/1242/tailscale-serve), which adds HTTPS and lets in only your own devices:
-
-```bash
-sudo tailscale serve --bg --https=443 http://127.0.0.1:8765   # https://<machine>.<tailnet>.ts.net/lab
-```
-
-To keep it running on a Pi, a systemd user service is enough (`sudo loginctl enable-linger $USER` once, so it keeps running after you log out):
-
-```ini
-# ~/.config/systemd/user/llb-lab.service, then: systemctl --user enable --now llb-lab
-[Unit]
-Description=llb lab
-
-[Service]
-WorkingDirectory=%h/local-llm-bench-lab
-ExecStart=%h/.local/bin/uv run --no-sync llb lab
-Restart=on-failure
-
-[Install]
-WantedBy=default.target
-```
-
-## Going further
-
-### What it measures
-
-An experiment enables one or more phases:
-
-| Phase | Runs on | Measures |
-|---|---|---|
-| `bench` | `llama-bench` | Prompt and generation tokens/s per test (`pp512`, `tg128`…), with median, IQR, CV and a 95% CI |
-| `latency` | `llama-server` | Time to first token, inter-token latency, end-to-end latency, one request at a time |
-| `quality` | `llama-server` | A score per answer from deterministic evaluators (exact, contains, regex, numeric, length, JSON schema…). It also covers embeddings, reranking and vision. |
-| `serving` | `llama-server` | Concurrent clients: requests/s, aggregate tokens/s, p95 latencies, errors |
-| `lm_eval` | lm-evaluation-harness | Standard benchmarks such as GSM8K (extra `lm-eval`) |
-| `judge` | `llama-server` | A stronger LLM scores answers from 1 to 5, stored apart from the objective scores |
-
-During every run, llb also records CPU temperature, frequency, RAM, the peak memory of the llama.cpp process and, on a Pi, throttling.
-
-### Example experiments
-
-| File | Question |
-|---|---|
-| [`pc-smoke.yaml`](experiments/pc-smoke.yaml) | Does everything work? (PC, all phases) |
-| [`pi5-threads.yaml`](experiments/pi5-threads.yaml) | How many threads give the best throughput? |
-| [`quantization.yaml`](experiments/quantization.yaml) | Q8_0 vs Q6_K vs Q5_K_M vs Q4_K_M: speed and memory |
-| [`kv-cache.yaml`](experiments/kv-cache.yaml) | What does quantizing the KV cache cost or save? |
-| [`pi5-latency.yaml`](experiments/pi5-latency.yaml) | Is it fast enough for an interactive assistant? |
-| [`serving.yaml`](experiments/serving.yaml) | What happens with 1, 2, 4 and 8 concurrent users? |
-| [`quality-es.yaml`](experiments/quality-es.yaml) | Which model writes Spanish best? (with an LLM judge) |
-| [`modalities.yaml`](experiments/modalities.yaml) | Embeddings, reranking and vision models |
-
-### Writing your own experiment
-
-```yaml
-version: 1
-extends: [_profiles/pc.yaml]                # build + hardware settings (or _profiles/pi5.yaml)
-
-experiment:
-  name: laptop-threads                      # also the results folder name
-
-models:
-  - { id: qwen3-1.7b, source: "hf://unsloth/Qwen3-1.7B-GGUF:Q4_K_M" }
-
-defaults:                                   # llama.cpp settings shared by every run
-  load: { ctx_size: 4096, batch_size: 512, flash_attn: auto }
-
-matrix:                                     # what varies: axes are crossed
-  load.threads: [2, 4, 6, 8]
-  zip:                                      # these move together: f16/f16, then q8_0/q8_0
-    - kv.cache_type_k: [f16, q8_0]
-      kv.cache_type_v: [f16, q8_0]
-
-phases:
-  bench: { n_prompt: [512], n_gen: [128], repetitions: 5 }
-  latency: { enabled: true, suites: [../suites/synthetic-512x128.yaml] }
-
-gates:                                      # pass/fail per configuration
-  - { metric: "tps:tg128", op: ">=", value: 10 }
-  - { metric: "ttft_ms_p95@synthetic-512x128", op: "<=", value: 2000, agg: max }
-select: { metric: "tps:tg128", objective: maximize }
-```
-
-Run `llb validate <yaml>` after each change: it points at the exact field that is wrong. Some notes:
-
-- **Settings**: the groups under `defaults` mirror llama.cpp's options: `load`, `kv`, `gpu`, `rope`, `speculative`, `server`, `sampling`. Raw flags go in `extra_args` and environment variables in `env`. Every field is defined in [`src/llmbench/config/llama/`](src/llmbench/config/llama/). A field a tool doesn't support is reported as `ignored` (for example, `llama-bench` has no `ctx_size`).
-- **Reasoning**: `defaults.server.reasoning` (`on`, `off` or `auto`), `reasoning_budget` and `reasoning_format` control thinking in models such as Qwen3, and `chat_template_kwargs` passes options like `{ enable_thinking: false }` to the template. Thinking tokens count towards a suite's `max_tokens` and delay the visible answer, so they change both latency and quality results. The reasoning text is stored apart from the answer.
-- **Matrix**: `exclude` removes combinations and `include` adds them. Every model and build is crossed with every variant.
-- **Models**: `source` can take three forms:
-  - `hf://org/repo:QUANT`, optionally pinned with `@<commit>` after the repo;
-  - `hf://org/repo/path/file.gguf`;
-  - a local `.gguf`.
-
-  `retention: keep` or `delete_after_run` on a model overrides the machine's `hardware.model_retention` (see [Models and disk space](#models-and-disk-space)). For gated repos, set `HF_TOKEN`.
-- **Builds**: `llama_cpp.builds` takes either `{ id, ref, backend }`, which llb compiles and caches (`cpu`, `cuda`, `vulkan`, `metal`, `blas`), or `{ id, bin_dir }` to use binaries you already have. With several builds you can compare llama.cpp versions.
-- **Suites**: the requests for the server phases live in [`suites/`](suites/). There are synthetic prompts with exact token counts, Spanish writing tasks, GSM8K from Hugging Face, embeddings, reranking and vision. A suite can also read jsonl/csv/parquet files or a Hugging Face dataset.
-- **Gate metrics**:
-  - `tps:<test>` and `tps_ci_low:<test>`;
-  - any server metric (`ttft_ms_p95`, `gen_tps_mean`, `score_mean`, `error_rate`…), optionally restricted to one suite with `@<suite>`;
-  - `peak_rss_mb`, `temp_peak_c` and `throttled`.
-- **Variables**: `${env:VAR:-default}` reads an environment variable. The profiles use it for `LLB_LLAMA_REF`, the llama.cpp version.
-
-### Commands
-
-| Command | What it does |
-|---|---|
-| `llb validate <yaml>` | Checks the schema, the suites, the models and the flags against each build |
-| `llb plan <yaml>` | Shows what `run` would execute |
-| `llb run <yaml> [--resume] [-m <model>] [-y]` | Runs the experiment. Exits with 1 if a run failed and 130 if interrupted. |
-| `llb report <yaml> [-f html -f md -f png]` | Builds reports from stored results |
-| `llb guide <yaml>` | Applies the gates, picks the winner and writes `guidance.md`. Exits with 1 if nothing passes. |
-| `llb judge <yaml>` | Runs the LLM judge over pending answers |
-| `llb serve` | Starts the read-only web dashboard: compare experiments, see each one's plan, hardware, explained charts and runs, sort and filter every table |
-| `llb lab [--llama-server <bin>] [--experiments <dir>]` | Starts the lab: models from Hugging Face, chat with live metrics, editors for experiments and suites that run every experiment command, llama.cpp builds, and the dashboard |
-| `llb llama build --ref <tag> [--backend cuda]` / `llama ls` | Compiles llama.cpp and lists the builds |
-| `llb models pull\|ls\|inspect\|favorite\|unfavorite\|prune` | Manages GGUF models |
-| `llb doctor` | Shows the environment |
-
-Every command has `--help`.
-
-### Results and resuming
-
-Each experiment writes to `~/.local/share/llmbench/runs/<name>/`, or to `output.directory` if you set it:
-
-| File | Contents |
-|---|---|
-| `benchmark.sqlite` | All results |
-| `summary.csv` | llama-bench results |
-| `latency.csv`, `quality.csv`, `serving.csv` | Server-phase results |
-| `runs.jsonl` | Every run with its full configuration and requests |
-| `report.*` | Reports |
-| `guidance.md` | Gates, winner and deploy command |
-
-A failed run never stops the experiment: its error is stored and the rest continue. `--resume` skips every run whose fingerprint already completed. The fingerprint is a hash of everything that determines the measurement, so changing a setting measures the affected runs again.
-
-### Models and disk space
-
-- Downloaded models live in the Hugging Face cache (`HF_HOME`).
-- Favorites live in `models/` as real files that are never deleted automatically, and you can drop your own `.gguf` files there too.
-- A model is looked up in `models/` first, then in the cache, and is downloaded only if it's in neither.
-- `hardware.model_retention` says whether downloaded models stay in the cache. The `pc` profile keeps them, so repeating an experiment or `--resume` downloads nothing. The `pi5` profile uses `delete_after_run`: each model leaves the cache after its last run, so a Pi holds about one model at a time. A model can set its own `retention` to override it.
-
-```bash
-uv run llb models pull hf://unsloth/Qwen3-1.7B-GGUF:Q4_K_M --favorite
-uv run llb models inspect hf://unsloth/Qwen3-1.7B-GGUF:Q4_K_M    # GGUF metadata of a model already on disk
-uv run llb models prune --older-than 30 --dry-run                # free cache space
-```
-
-`llb models inspect` reads the GGUF header of a model that is already in `models/` or the cache, or of a local file. It never downloads, so pull the model first. It shows the architecture, name, size, quantization, parameter count, context length, layers, attention heads and, for mixture-of-experts models, the expert counts. It does not say whether a model reasons or what kind of model it is. `--raw` prints every metadata key, where you can tell:
-
-- **reasoning**: `tokenizer.chat_template` mentions `<think>` or `enable_thinking` (Qwen3, for example);
-- **base or chat**: a base model usually has no `tokenizer.chat_template`;
-- **embeddings or reranking**: `<architecture>.pooling_type` is usually set;
-- **vision**: not in the model's GGUF; the repo ships a separate `mmproj-*.gguf`.
-
-### Configuration
-
-| Variable | Default | Purpose |
-|---|---|---|
-| `LLB_HOME` | `~/.local/share/llmbench` | Builds, llama.cpp source and results |
-| `LLB_MODELS_DIR` | `./models` | Favorites folder |
-| `LLB_LLAMA_REF` | Set by each profile | llama.cpp version used by the profiles |
-| `HF_HOME`, `HF_TOKEN` | Hugging Face defaults | Model cache and access to gated repos |
-
-Optional extras for `uv sync`:
-
-| Extra | Enables |
-|---|---|
-| `report` | HTML and PNG reports |
-| `serve` | The dashboard and the lab |
-| `hf-datasets` | Suites built from Hugging Face datasets or parquet files |
-| `lm-eval` | The `lm_eval` phase |
-
-`uv sync` removes any extra you don't list, so repeat all of them every time.
-
-### Limitations
-
-- **GPU**: llb builds llama.cpp with CUDA, Vulkan or Metal and passes every offloading flag, but it doesn't read GPU telemetry: no VRAM, utilization, temperature or power. GPU builds are not tested on real hardware yet.
-- **Memory**: nothing checks in advance whether a model fits in RAM. A run killed for lack of memory is recorded as failed, and the experiment continues.
-- **Scope**: llama.cpp on Linux only. macOS is untested, and there is no Ollama, vLLM, cloud APIs or energy measurement.
+The lab listens on 127.0.0.1 only (it has no authentication). The **info** tab explains how to reach it with an SSH tunnel or Tailscale and how to keep it running with systemd.
 
 ## Development
 
