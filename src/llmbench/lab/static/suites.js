@@ -607,7 +607,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   if (param("file")) await openFile(param("file"));
   else {
-    $("howto").open = true; // nothing open yet: start with how it all fits together
     $("new-box").hidden = false;
     $("form").replaceChildren(el("p", { class: "muted", text: "Open a suite above, or create a new one." }));
     renderDirty();

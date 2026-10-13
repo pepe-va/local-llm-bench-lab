@@ -286,9 +286,13 @@ def test_editor_saves_checks_and_runs_like_the_terminal(
     assert "x 2" in plan.json()["output"]  # 2 tests x 2 repetitions
 
     save = {"name": "mine.yaml", "text": text}
-    assert client.post("/lab/api/editor/save", json=save, headers=ACT).json()["files"] == [
-        "mine.yaml"
-    ]
+    saved = client.post("/lab/api/editor/save", json=save, headers=ACT).json()
+    assert saved["files"] == ["mine.yaml"]
+    [card] = saved["experiments"]  # the picker's card
+    assert card["file"] == "mine.yaml"
+    assert card["phases"] == ["bench"]
+    assert len(card["models"]) == 1
+    assert card["results"] is None
     assert client.post("/lab/api/editor/save", json=save, headers=ACT).status_code == 400
     bad = client.post("/lab/api/editor/save", json={**save, "name": "../x.yaml"}, headers=ACT)
     assert bad.status_code == 400
@@ -307,13 +311,33 @@ def test_editor_saves_checks_and_runs_like_the_terminal(
     job = client.get("/lab/api/status").json()["job"]
     assert job["state"] == "ok", job["tail"]
     assert (runs_dir() / job["experiment"] / "benchmark.sqlite").is_file()
+    [card] = client.get("/lab/api/editor/experiments").json()["experiments"]
+    assert card["results"] == str(runs_dir() / job["experiment"])
     assert client.get(job["results"]).status_code == 200
 
     guide = client.post("/lab/api/editor/command", json={**run, "command": "guide"}, headers=ACT)
     assert "guidance.md" in guide.json()["sync"]["output"]
 
 
-def test_builds_wait_for_downloads_and_check_the_ref(lab: Lab, client: TestClient) -> None:
+def test_new_experiments_get_the_chosen_name_or_a_free_one(
+    client: TestClient, lab: Lab, chat_model: Path
+) -> None:
+    key = model_key(client, where="local")
+    body: dict[str, Any] = {"models": [key], "presets": ["speed"]}
+    named = client.post("/lab/api/editor/new", json={**body, "name": "my-exp"}, headers=ACT)
+    assert editor.parse(named.json()["text"])["experiment"]["name"] == "my-exp"
+    bad = client.post("/lab/api/editor/new", json={**body, "name": "two words"}, headers=ACT)
+    assert bad.status_code == 400
+    first = editor.parse(client.post("/lab/api/editor/new", json=body, headers=ACT).json()["text"])
+    name = first["experiment"]["name"]
+    (lab.experiments.folder / f"{name}.yaml").write_text("version: 1\n")
+    again = editor.parse(client.post("/lab/api/editor/new", json=body, headers=ACT).json()["text"])
+    assert again["experiment"]["name"] == f"{name}-2"
+    cards = client.get("/lab/api/editor/experiments").json()["experiments"]
+    assert [c["file"] for c in cards] == [f"{name}.yaml"]
+    assert cards[0]["phases"] == [
+        "bench"
+    ]  # bench runs unless disabledlab: Lab, client: TestClient) -> None:
     bad = client.post("/lab/api/system/build", json={"ref": "b1; rm -rf /"}, headers=ACT)
     assert bad.status_code == 400
     # a download still writing to disk (no thread behind it: it never finishes)

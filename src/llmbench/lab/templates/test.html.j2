@@ -33,39 +33,75 @@
   .toolbar2 .grp:last-child { border-right: none; }
   .dirty { color: var(--amber); }
   #output pre { max-height: 460px; }
+  .pick { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+  @media (max-width: 1000px) { .pick { grid-template-columns: 1fr; } }
+  .pick h3 { margin: 0 0 10px; }
+  .pick-head { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; justify-content: space-between; min-height: 32px; margin-bottom: 10px; }
+  .pick-head h3 { margin: 0; } .pick-head input { flex: 1; min-width: 180px; max-width: 320px; }
+  .exp-cards { display: grid; gap: 8px; max-height: calc(100vh - 260px); overflow-y: auto; }
+  .exp-card { display: block; width: 100%; text-align: left; font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line-2); padding: 8px 12px; cursor: pointer; }
+  .exp-card:hover, .exp-card:focus-visible { border-color: var(--green); outline: none; }
+  .exp-card .top { display: flex; gap: 10px; align-items: baseline; justify-content: space-between; }
+  .exp-card .top b { color: var(--green); overflow-wrap: anywhere; }
+  .exp-card .desc { color: var(--muted); font-size: 12px; margin: 2px 0 4px; }
+  .exp-card .meta { display: flex; flex-wrap: wrap; gap: 4px 6px; font-size: 11px; }
+  .pill { border: 1px solid var(--line-2); color: var(--dim); padding: 0 6px; }
+  .pill.ph { color: var(--cyan); border-color: var(--cyan); }
+  .pill.res { color: var(--green); border-color: var(--green); }
+  .pill.err { color: var(--red); border-color: var(--red); }
+  .new-steps { list-style: none; padding: 0; margin: 0 0 12px; display: grid; gap: 12px; }
+  .new-steps li { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 8px; }
+  .new-steps .n { display: inline-grid; place-items: center; width: 22px; height: 22px; border: 1px solid var(--green); color: var(--green); font-size: 12px; }
+  .new-steps input, .new-steps select { display: block; margin-top: 4px; max-width: 100%; }
+  .new-steps .checks { margin-top: 4px; }
+  .filebar { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+  .filebar #title { font-size: 16px; color: var(--green); }
+  .filebar .spacer { flex: 1; }
+  .saveas input { margin-left: 4px; }
 </style>
 {% endblock %}
 {% block content %}
 <h1>test<span class="cursor"></span></h1>
 {% with here = "test" %}{% include "_guide.html.j2" %}{% endwith %}
-<p class="help">An experiment editor with the same YAML and commands as the terminal. Files live in <code id="folder"></code>, next to the examples, so <code>llb run</code> works on them by hand too. Edit with the form or in the YAML on the right: both stay in sync, and the form keeps the YAML's comments.</p>
+<p class="help">Open an experiment or create one. Files live in <code id="folder"></code>, next to the examples, so <code>llb run</code> works on them by hand too. While editing, the form and the YAML on the right stay in sync, and the form keeps the YAML's comments.</p>
 
-<div class="panel">
-  <div class="toolbar2">
-    <div class="grp">
-      <select id="files" aria-label="experiment files"></select>
-      <button class="btn small" id="open">open</button>
-      <button class="btn small" id="new-toggle">new…</button>
+<section id="picker" hidden>
+  <div class="pick">
+    <div class="panel">
+      <div class="pick-head">
+        <h3>open an experiment</h3>
+        <input id="filter" type="search" placeholder="filter by name, model, tag…" aria-label="filter experiments">
+      </div>
+      <div id="exp-cards" class="exp-cards"></div>
     </div>
-    <div class="grp">
-      <label class="dim">file <input id="name" placeholder="my-experiment.yaml" size="28"></label>
-      <button class="btn small" id="save">save</button>
-      <span id="dirty"></span>
+    <div class="panel" id="new-box">
+      <div class="pick-head"><h3>new experiment</h3></div>
+      <ol class="new-steps">
+        <li><span class="n">1</span><div><b>name</b> <span class="hint">also the file and the results folder</span>
+          <input id="new-name" placeholder="my-experiment" size="32" aria-label="experiment name">
+          <div class="hint" id="new-where"></div></div></li>
+        <li><span class="n">2</span><div><b>machine</b> <span class="hint">llama.cpp build, cooldown, telemetry</span>
+          <select id="new-profile" aria-label="machine profile"></select></div></li>
+        <li><span class="n">3</span><div><b>models</b> <span class="hint">downloaded in the models tab</span>
+          <div class="checks" id="new-models"></div></div></li>
+        <li><span class="n">4</span><div><b>what to measure</b>
+          <div class="checks" id="new-presets"></div></div></li>
+        <li><span class="n">5</span><div><b>extra suites</b> <span class="hint">optional: a synthetic one goes to latency, any other to quality</span>
+          <div class="checks" id="new-suites"></div></div></li>
+      </ol>
+      <button class="btn" id="new-create">create and open</button>
     </div>
   </div>
-  <div id="new-box" hidden>
-    <h3>new experiment</h3>
-    <div class="row">
-      <label>profile <select id="new-profile"></select></label>
-    </div>
-    <p class="hint" style="margin:8px 0 2px">models</p>
-    <div class="checks" id="new-models"></div>
-    <p class="hint" style="margin:8px 0 2px">start with these tests</p>
-    <div class="checks" id="new-presets"></div>
-    <p class="hint" style="margin:8px 0 2px">and these suites (a synthetic one goes to latency, any other to quality)</p>
-    <div class="checks" id="new-suites"></div>
-    <div style="margin-top:10px"><button class="btn" id="new-create">create</button></div>
-  </div>
+</section>
+
+<section id="workspace" hidden>
+<div class="panel filebar">
+  <button class="btn small" id="back" title="back to the list of experiments">← experiments</button>
+  <b id="title"></b>
+  <span id="dirty"></span>
+  <span class="spacer"></span>
+  <label class="dim saveas">file <input id="name" placeholder="my-experiment.yaml" size="26"></label>
+  <button class="btn small" id="save">save</button>
 </div>
 
 <div class="panel" style="margin-top:10px">
@@ -95,4 +131,5 @@
     <div id="yaml-state"></div>
   </div>
 </div>
+</section>
 {% endblock %}

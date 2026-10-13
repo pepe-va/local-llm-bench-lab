@@ -80,6 +80,7 @@ class NewReq(BaseModel):
     presets: list[str] = []
     suites: list[str] = []
     """Paths relative to the experiments folder, as `/lab/api/editor/meta` lists them."""
+    name: str | None = None
 
 
 class SaveReq(BaseModel):
@@ -241,6 +242,11 @@ def create_lab_app(  # noqa: PLR0915 (route table: one function per endpoint)
     def editor_meta() -> JSONResponse:
         return JSONResponse(lab.editor_meta())
 
+    @app.get("/lab/api/editor/experiments")
+    def editor_experiments() -> JSONResponse:
+        exps = lab.experiments
+        return JSONResponse({"files": exps.files(), "experiments": exps.summaries()})
+
     @app.get("/lab/api/editor/file")
     def editor_file(name: str) -> JSONResponse:
         text = call(lambda: lab.experiments.read(name))
@@ -257,13 +263,18 @@ def create_lab_app(  # noqa: PLR0915 (route table: one function per endpoint)
 
     @app.post("/lab/api/editor/new")
     def editor_new(req: NewReq) -> JSONResponse:
-        text = call(lambda: lab.new_experiment(req.models, req.profile, req.presets, req.suites))
+        text = call(
+            lambda: lab.new_experiment(req.models, req.profile, req.presets, req.suites, req.name)
+        )
         return JSONResponse({"text": text, "doc": parse(text)})
 
     @app.post("/lab/api/editor/save")
     def editor_save(req: SaveReq) -> JSONResponse:
         path = call(lambda: lab.experiments.save(req.name, req.text, overwrite=req.overwrite))
-        return JSONResponse({"name": req.name, "path": str(path), "files": lab.experiments.files()})
+        return JSONResponse({
+            "name": req.name, "path": str(path), "files": lab.experiments.files(),
+            "experiments": lab.experiments.summaries(),
+        })  # fmt: skip
 
     @app.post("/lab/api/editor/check")
     def editor_check(req: CheckReq) -> JSONResponse:

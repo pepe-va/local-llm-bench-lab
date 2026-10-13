@@ -262,6 +262,7 @@ class Lab:
             "help": editor.field_help(),
             "folder": str(self.experiments.folder),
             "files": self.experiments.files(),
+            "experiments": self.experiments.summaries(),
             "profiles": profiles,
             "default_profile": default,
             "suites": self.experiments.suites(),
@@ -275,15 +276,23 @@ class Lab:
         profile: str | None,
         presets: list[str],
         suites: list[str] | None = None,
+        name: str | None = None,
     ) -> str:
+        if name is not None and not editor.NAME.match(name):
+            raise LabError(f"invalid name {name!r}: use letters, digits, . _ - (up to 80)")
         models = [self.model(k) for k in keys]
         known = set(self.experiments.suites())
         if unknown := [s for s in suites or [] if s not in known]:
             raise LabError(f"unknown suite(s): {', '.join(unknown)}")
         doc = editor.new_experiment(
             models, folder=self.experiments.folder, root=self.root, profile=profile,
-            presets=presets, suites=suites,
+            presets=presets, suites=suites, name=name,
         )  # fmt: skip
+        if name is None:  # a generated name never collides with an existing file
+            meta, files = doc["experiment"], set(self.experiments.files())
+            base, i = meta["name"], 2
+            while f"{meta['name']}.yaml" in files:
+                meta["name"], i = f"{base}-{i}", i + 1
         return editor.dump(doc)
 
     def command(

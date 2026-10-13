@@ -27,6 +27,7 @@ from llmbench.config.experiment import BenchPhase, Experiment
 from llmbench.config.llama import LlamaConfig
 from llmbench.lab.models import LocalModel
 from llmbench.llamacpp.argv import bench_argv, sampling_flags, server_argv
+from llmbench.paths import runs_dir
 from llmbench.serve.details import SETTING_HELP
 
 _FILE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*\.ya?ml$")
@@ -35,6 +36,11 @@ _YAML11_WORDS = {"on", "off", "yes", "no", "y", "n", "true", "false"}
 Path_ = list[str | int]
 _FLOW_WIDTH = 80
 """A mapping of scalars is written on one line (`{ id: x, source: y }`) only if it fits."""
+_PHASE_DEFAULTS = {"bench": True, "latency": False, "quality": False, "serving": False,
+                   "lm_eval": False, "judge": False}  # fmt: skip
+"""Whether each phase runs when the YAML does not say `enabled` (see `Phases`)."""
+NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$")
+"""An experiment name (`ExperimentMeta.name`), also its file name and results folder."""
 
 
 class EditorError(Exception):
@@ -43,6 +49,14 @@ class EditorError(Exception):
     def __init__(self, message: str, line: int | None = None) -> None:
         super().__init__(message)
         self.line = line
+
+
+def _mapping(value: object) -> dict[str, Any]:
+    return cast(dict[str, Any], value) if isinstance(value, dict) else {}
+
+
+def _list(value: object) -> list[Any]:
+    return cast(list[Any], value) if isinstance(value, list) else []
 
 
 def _rt() -> YAML:
@@ -300,6 +314,45 @@ class Experiments:
         if not self.folder.is_dir():
             return []
         return sorted(p.name for p in self.folder.glob("*.y*ml") if _FILE.match(p.name))
+
+    def summaries(self) -> list[dict[str, Any]]:
+        """One card per file for the picker, most recently edited first."""
+        cards = [self.summary(name) for name in self.files()]
+        return sorted(cards, key=lambda c: -c["modified"])
+
+    def summary(self, name: str) -> dict[str, Any]:
+        """What a file measures and whether it already has results, without validating it."""
+        p = self.path(name)
+        card: dict[str, Any] = {"file": name, "modified": p.stat().st_mtime}
+        try:
+            doc = parse(p.read_text())
+        except EditorError as e:
+            return card | {"error": str(e)}
+        meta = _mapping(doc.get("experiment"))
+        exp_name = meta.get("name")
+        models = [_mapping(m).get("id") for m in _list(doc.get("models"))]
+        phases = _mapping(doc.get("phases"))
+        card |= {
+            "name": exp_name if isinstance(exp_name, str) else None,
+            "description": str(meta.get("description") or ""),
+            "tags": [str(t) for t in _list(meta.get("tags")) if t is not None],
+            "models": [str(m) for m in models if m is not None],
+            "phases": [
+                k for k, on in _PHASE_DEFAULTS.items() if _mapping(phases.get(k)).get("enabled", on)
+            ],
+        }
+        out = _mapping(doc.get("output")).get("directory")
+        results = (
+            self.root / Path(str(out)).expanduser()
+            if out
+            else runs_dir() / exp_name
+            if isinstance(exp_name, str) and exp_name
+            else None
+        )
+        has = results is not None and (results / "benchmark.sqlite").is_file()
+        card["results"] = str(results) if has else None
+        card["report"] = bool(has and results and (results / "report.md").is_file())
+        return card
 
     def profiles(self) -> list[str]:
         """`extends` entries, relative to the experiments folder."""

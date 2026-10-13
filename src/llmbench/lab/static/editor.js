@@ -181,21 +181,89 @@ function renderMatrix(d) {
 
 // -- files and commands ---------------------------------------------------------------
 
-function renderFiles(files, current) {
-  $("files").replaceChildren(el("option", { value: "", text: files.length ? "open an experiment…" : "(no experiments yet)" }), files.map((f) => el("option", { value: f, text: f })));
-  if (current && files.includes(current)) $("files").value = current;
+function ago(seconds) {
+  const d = Date.now() / 1000 - seconds;
+  if (d < 90) return "just now";
+  if (d < 5400) return `${Math.round(d / 60)} min ago`;
+  if (d < 129600) return `${Math.round(d / 3600)} h ago`;
+  return `${Math.round(d / 86400)} days ago`;
 }
 
-async function openFile(name) {
+function renderCards() {
+  const q = $("filter").value.trim().toLowerCase();
+  const cards = meta.experiments.filter((c) => !q || [c.file, c.name, c.description, ...(c.tags || []), ...(c.models || [])].join(" ").toLowerCase().includes(q));
+  if (!meta.experiments.length) {
+    $("exp-cards").replaceChildren(el("p", { class: "muted", text: "No experiments yet: create one on the right." }));
+    return;
+  }
+  if (!cards.length) {
+    $("exp-cards").replaceChildren(el("p", { class: "muted", text: `Nothing matches "${$("filter").value}".` }));
+    return;
+  }
+  $("exp-cards").replaceChildren(...cards.map((c) => {
+    const pills = c.error
+      ? [el("span", { class: "pill err", title: c.error, text: "YAML error" })]
+      : [
+          ...c.phases.map((p) => el("span", { class: "pill ph", text: p })),
+          el("span", { class: "pill", title: c.models.join("\n"), text: c.models.length === 1 ? c.models[0] : `${c.models.length} models` }),
+          ...c.tags.map((t) => el("span", { class: "pill", text: `#${t}` })),
+          c.results ? el("span", { class: "pill res", title: c.results, text: c.report ? "results + report" : "results" }) : null,
+        ];
+    return el("button", { class: "exp-card", type: "button", onclick: () => openFile(c.file) },
+      el("div", { class: "top" }, el("b", { text: c.file.replace(/\.ya?ml$/, "") }), el("span", { class: "hint", text: ago(c.modified) })),
+      c.description ? el("div", { class: "desc", text: c.description }) : null,
+      el("div", { class: "meta" }, ...pills),
+    );
+  }));
+}
+
+function unsavedOk() {
+  return !text || text === (saved ?? "") || confirm("Discard the unsaved changes?");
+}
+
+function showPicker() {
+  $("workspace").hidden = true;
+  $("picker").hidden = false;
+  renderCards();
+  // a run may have added results since the page loaded
+  api("GET", "/lab/api/editor/experiments").then((r) => {
+    meta.experiments = r.experiments;
+    meta.files = r.files;
+    renderCards();
+    renderNewWhere();
+  }, () => {});
+}
+
+function showWorkspace() {
+  $("picker").hidden = true;
+  $("workspace").hidden = false;
+  $("title").textContent = $("name").value.replace(/\.ya?ml$/, "") || "new experiment";
+}
+
+function goBack() {
+  if (!unsavedOk()) return;
+  text = "";
+  saved = null;
+  $("output").replaceChildren();
+  history.pushState(null, "", "/lab/test");
+  showPicker();
+}
+
+async function openFile(name, { push = true } = {}) {
   if (!name) return;
-  if (text !== (saved ?? "") && text && !confirm("Discard the unsaved changes?")) return;
+  if (!unsavedOk()) return;
   const r = await act(() => api("GET", `/lab/api/editor/file?name=${encodeURIComponent(name)}`));
   if (!r) return;
   $("name").value = r.name;
   saved = r.text;
   setText(r.text);
+  $("output").replaceChildren();
   await reparseNow();
-  history.replaceState(null, "", `/lab/test?file=${encodeURIComponent(name)}`);
+  const url = `/lab/test?file=${encodeURIComponent(name)}`;
+  if (push) history.pushState(null, "", url);
+  else history.replaceState(null, "", url);
+  showWorkspace();
+  window.scrollTo(0, 0);
 }
 
 async function reparseNow() {
@@ -226,9 +294,10 @@ async function save() {
   const r = await act(() => api("POST", "/lab/api/editor/save", { name, text, overwrite: exists }), `saved ${name}`);
   if (!r) return null;
   meta.files = r.files;
+  meta.experiments = r.experiments;
   saved = text;
-  renderFiles(r.files, name);
   renderDirty();
+  $("title").textContent = name.replace(/\.ya?ml$/, "");
   history.replaceState(null, "", `/lab/test?file=${encodeURIComponent(name)}`);
   return name;
 }
@@ -275,24 +344,37 @@ async function command(cmd, extra) {
 
 function renderNewBox() {
   const usable = meta.profiles.filter((p) => !p.endsWith("/deterministic.yaml"));
-  $("new-profile").replaceChildren(...usable.map((p) => el("option", { value: p, text: p.replace("_profiles/", "") })), el("option", { value: "", text: "none (write everything yourself)" }));
+  $("new-profile").replaceChildren(...usable.map((p) => el("option", { value: p, text: p.replace("_profiles/", "").replace(/\.ya?ml$/, "") })), el("option", { value: "", text: "none (write everything yourself)" }));
   if (meta.default_profile) $("new-profile").value = meta.default_profile;
   const wanted = param("model");
-  $("new-models").replaceChildren(...(localModels.length ? localModels.map((m) => el("label", {}, el("input", { type: "checkbox", value: m.key, checked: m.key === wanted }), `${m.name} · ${m.quant}`)) : [el("span", { class: "muted", text: "no models downloaded yet: add references in the form afterwards" })]));
+  $("new-models").replaceChildren(...(localModels.length ? localModels.map((m) => el("label", {}, el("input", { type: "checkbox", value: m.key, checked: m.key === wanted }), `${m.name} · ${m.quant}`)) : [el("span", { class: "muted", text: "no models downloaded yet: add them in the form afterwards" })]));
   // coming from the suites tab with a suite: start from it rather than from the presets
   const suite = param("suite");
   $("new-presets").replaceChildren(...meta.presets.map((p, i) => el("label", { title: p.help }, el("input", { type: "checkbox", value: p.key, checked: !suite && i < 2 }), p.title)));
   const name = (rel) => rel.split("/").pop();
   $("new-suites").replaceChildren(...meta.suites.map((rel) => el("label", { title: rel }, el("input", { type: "checkbox", value: rel, checked: name(rel) === suite }), name(rel).replace(/\.ya?ml$/, ""))));
+  renderNewWhere();
+}
+
+function renderNewWhere() {
+  const n = $("new-name").value.trim();
+  const where = $("new-where");
+  if (!n) where.replaceChildren("empty: named after the model (lab-experiment with several)");
+  else if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/.test(n)) where.replaceChildren(el("span", { class: "ko", text: "use letters, digits, . _ - (no spaces)" }));
+  else if (meta.files.includes(`${n}.yaml`)) where.replaceChildren(el("span", { class: "ko", text: `${n}.yaml already exists: open it from the list` }));
+  else where.replaceChildren(`saved as ${meta.folder.split("/").pop()}/${n}.yaml`);
 }
 
 async function createNew() {
-  if (text && text !== (saved ?? "") && !confirm("Discard the unsaved changes?")) return;
+  if (!unsavedOk()) return;
+  const name = $("new-name").value.trim() || null;
+  if (name && meta.files.includes(`${name}.yaml`)) return say(`${name}.yaml already exists: open it from the list, or pick another name`);
   const body = {
     models: [...$("new-models").querySelectorAll("input:checked")].map((c) => c.value),
     profile: $("new-profile").value || null,
     presets: [...$("new-presets").querySelectorAll("input:checked")].map((c) => c.value),
     suites: [...$("new-suites").querySelectorAll("input:checked")].map((c) => c.value),
+    name,
   };
   const r = await act(() => api("POST", "/lab/api/editor/new", body));
   if (!r) return;
@@ -300,10 +382,13 @@ async function createNew() {
   saved = null;
   setText(r.text);
   $("name").value = `${Form.doc.experiment.name}.yaml`;
-  $("new-box").hidden = true;
-  history.replaceState(null, "", "/lab/test");
+  $("new-name").value = "";
+  $("output").replaceChildren();
+  history.pushState(null, "", "/lab/test");
+  showWorkspace();
   renderForm();
   renderRunModels();
+  if (!meta.files.includes($("name").value)) await save(); // on disk straight away, so it shows in the list
 }
 
 // -- start ----------------------------------------------------------------------------
@@ -326,7 +411,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   }
   $("folder").textContent = meta.folder;
-  renderFiles(meta.files, param("file"));
   renderNewBox();
 
   $("yaml").addEventListener("input", onYamlInput);
@@ -336,9 +420,19 @@ document.addEventListener("DOMContentLoaded", async () => {
       document.execCommand("insertText", false, "  ");
     }
   });
-  $("open").addEventListener("click", () => openFile($("files").value));
-  $("new-toggle").addEventListener("click", () => ($("new-box").hidden = !$("new-box").hidden));
+  $("filter").addEventListener("input", renderCards);
+  $("new-name").addEventListener("input", renderNewWhere);
+  $("back").addEventListener("click", goBack);
   $("new-create").addEventListener("click", createNew);
+  window.addEventListener("popstate", () => {
+    if (param("file")) openFile(param("file"), { push: false });
+    else if (!$("workspace").hidden) {
+      if (text && text !== (saved ?? "") && !confirm("Discard the unsaved changes?")) return history.pushState(null, "", `/lab/test${saved !== null && $("name").value ? `?file=${encodeURIComponent($("name").value)}` : ""}`);
+      text = "";
+      saved = null;
+      showPicker();
+    }
+  });
   $("save").addEventListener("click", save);
   $("validate").addEventListener("click", () => check("validate"));
   $("plan").addEventListener("click", () => check("plan"));
@@ -354,12 +448,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     for (const id of ["run", "judge", "report"]) $(id).disabled = busy;
   });
 
-  if (param("file")) await openFile(param("file"));
-  else if (param("model")) await createNew();
+  if (param("file")) {
+    await openFile(param("file"), { push: false });
+    if ($("workspace").hidden) showPicker(); // the file is gone or unreadable
+  } else if (param("model")) await createNew();
   else {
-    if (!param("suite")) $("howto").open = true; // nothing open yet: start with how it all fits
-    $("new-box").hidden = false;
-    $("form").replaceChildren(el("p", { class: "muted", text: "Open an experiment above, or create a new one." }));
-    renderDirty();
+    showPicker();
+    if (param("suite")) $("new-name").focus();
   }
 });
